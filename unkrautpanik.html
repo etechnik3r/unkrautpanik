@@ -1,0 +1,1165 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Merles Unkrautpanik 🌿</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { width:100%; height:100%; overflow:hidden; background:#1a1a2e; font-family:'Segoe UI',Arial,sans-serif; }
+#gameCanvas { display:block; cursor:pointer; }
+#ui-overlay {
+  position:absolute; top:0; left:0; width:100%; pointer-events:none; z-index:10;
+}
+#hud {
+  display:flex; justify-content:center; align-items:center; gap:18px;
+  padding:10px 18px; background:rgba(30,30,50,0.85); border-bottom:2px solid #444;
+  pointer-events:auto; flex-wrap:wrap;
+}
+.hud-item { display:flex; align-items:center; gap:6px; color:#e0e0e0; font-size:14px; white-space:nowrap; }
+.hud-label { color:#aaa; font-size:12px; }
+.bar-outer { width:120px; height:16px; background:#333; border-radius:8px; overflow:hidden; border:1px solid #555; }
+.bar-inner { height:100%; border-radius:8px; transition:width 0.3s; }
+#energy-bar { background:linear-gradient(90deg,#f7b733,#fc4a1a); width:0%; }
+#overgrowth-bar { background:linear-gradient(90deg,#56ab2f,#e74c3c); width:0%; }
+#score-display { font-size:18px; font-weight:700; color:#f7b733; }
+#mute-btn {
+  pointer-events:auto; background:none; border:1px solid #666; color:#e0e0e0;
+  border-radius:6px; padding:4px 10px; cursor:pointer; font-size:16px;
+}
+#mute-btn:hover { border-color:#f7b733; color:#f7b733; }
+
+/* Werkzeugleiste */
+#toolbar {
+  position:absolute; pointer-events:auto; display:flex; gap:8px; z-index:12;
+}
+#toolbar.desktop { right:16px; top:50%; transform:translateY(-50%); flex-direction:column; }
+#toolbar.mobile { bottom:12px; left:50%; transform:translateX(-50%); flex-direction:row; }
+.tool-btn {
+  width:60px; height:60px; border-radius:12px; border:2px solid #555;
+  background:rgba(30,30,50,0.9); color:#e0e0e0; cursor:pointer;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  font-size:10px; transition:all 0.15s; position:relative;
+}
+.tool-btn:hover { border-color:#f7b733; transform:scale(1.08); }
+.tool-btn.active { border-color:#f7b733; background:rgba(247,183,51,0.25); box-shadow:0 0 12px rgba(247,183,51,0.4); }
+.tool-btn .icon { font-size:24px; }
+.tool-btn .key { position:absolute; top:2px; right:5px; font-size:9px; color:#888; }
+.tool-btn.locked { opacity:0.4; pointer-events:none; }
+
+/* Superwaffen */
+#super-toolbar {
+  position:absolute; pointer-events:auto; display:flex; gap:8px; z-index:12;
+}
+#super-toolbar.desktop { right:16px; bottom:16px; flex-direction:row; }
+#super-toolbar.mobile { bottom:80px; left:50%; transform:translateX(-50%); flex-direction:row; }
+.super-btn {
+  width:56px; height:56px; border-radius:50%; border:2px solid #555;
+  background:rgba(30,30,50,0.9); color:#e0e0e0; cursor:pointer;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  font-size:9px; transition:all 0.15s;
+}
+.super-btn:hover { border-color:#fc4a1a; transform:scale(1.1); }
+.super-btn.ready { border-color:#fc4a1a; box-shadow:0 0 14px rgba(252,74,26,0.5); animation:pulse 1.2s infinite; }
+.super-btn .icon { font-size:22px; }
+@keyframes pulse { 0%,100%{box-shadow:0 0 8px rgba(252,74,26,0.3)} 50%{box-shadow:0 0 18px rgba(252,74,26,0.7)} }
+
+/* Achievements */
+.achievement {
+  position:fixed; top:80px; right:20px; background:rgba(30,30,50,0.95);
+  border:2px solid #f7b733; border-radius:12px; padding:14px 22px;
+  color:#f7b733; font-size:14px; z-index:100; pointer-events:none;
+  animation: slideIn 0.4s ease-out, fadeOut 0.5s 2.5s forwards;
+}
+@keyframes slideIn { from{transform:translateX(120px);opacity:0} to{transform:translateX(0);opacity:1} }
+@keyframes fadeOut { to{opacity:0;transform:translateY(-20px)} }
+
+/* Game Over */
+#game-over {
+  position:fixed; top:0; left:0; width:100%; height:100%;
+  background:rgba(0,0,0,0.88); display:none; z-index:200;
+  flex-direction:column; align-items:center; justify-content:center; color:#e0e0e0;
+}
+#game-over h1 { font-size:48px; color:#e74c3c; margin-bottom:10px; }
+#game-over .subtitle { font-size:16px; color:#aaa; margin-bottom:30px; }
+#game-over .final-score { font-size:60px; color:#f7b733; font-weight:700; }
+#game-over .final-label { font-size:14px; color:#aaa; margin-bottom:30px; }
+#restart-btn {
+  padding:14px 40px; font-size:18px; border:2px solid #f7b733; color:#f7b733;
+  background:none; border-radius:10px; cursor:pointer; transition:all 0.2s;
+}
+#restart-btn:hover { background:#f7b733; color:#1a1a2e; }
+
+/* Start-Screen */
+#start-screen {
+  position:fixed; top:0; left:0; width:100%; height:100%;
+  background:rgba(0,0,0,0.92); z-index:300;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; color:#e0e0e0;
+}
+#start-screen h1 { font-size:42px; color:#56ab2f; margin-bottom:6px; text-align:center; }
+#start-screen .sub { font-size:16px; color:#aaa; margin-bottom:40px; }
+#start-screen .controls { font-size:13px; color:#888; margin-bottom:20px; text-align:center; line-height:1.8; }
+#start-btn {
+  padding:16px 50px; font-size:20px; border:2px solid #56ab2f; color:#56ab2f;
+  background:none; border-radius:10px; cursor:pointer; transition:all 0.2s;
+}
+#start-btn:hover { background:#56ab2f; color:#1a1a2e; }
+</style>
+</head>
+<body>
+
+<canvas id="gameCanvas"></canvas>
+
+<div id="ui-overlay">
+  <div id="hud">
+    <div class="hud-item"><span class="hud-label">Score:</span><span id="score-display">0</span></div>
+    <div class="hud-item">
+      <span class="hud-label">Energie:</span>
+      <div class="bar-outer"><div class="bar-inner" id="energy-bar"></div></div>
+    </div>
+    <div class="hud-item">
+      <span class="hud-label">Verwucherung:</span>
+      <div class="bar-outer"><div class="bar-inner" id="overgrowth-bar"></div></div>
+      <span id="overgrowth-pct" style="color:#e74c3c;font-size:12px;">0%</span>
+    </div>
+    <button id="mute-btn" title="Ton an/aus">🔊</button>
+  </div>
+</div>
+
+<div id="toolbar"></div>
+<div id="super-toolbar"></div>
+
+<div id="game-over">
+  <h1>🌿 GAME OVER 🌿</h1>
+  <div class="subtitle">Der Hof ist komplett zugewuchert!</div>
+  <div class="final-label">Dein Score:</div>
+  <div class="final-score" id="final-score">0</div>
+  <br>
+  <button id="restart-btn">🔄 Nochmal spielen</button>
+</div>
+
+<div id="start-screen">
+  <h1>🌿 Merles Unkrautpanik</h1>
+  <div class="sub">Rette deinen Hof vor dem Unkraut!</div>
+  <div class="controls">
+    <b>Steuerung:</b><br>
+    Klicke auf Unkraut, um es zu entfernen<br>
+    <b>[1]</b> Hand &nbsp; <b>[2]</b> Wurzelstecher<br>
+    <b>[Q]</b> Abflammer &nbsp; <b>[W]</b> Spray &nbsp; <b>[E]</b> Vibro-Stampfer<br>
+    Superwaffen benötigen volle Energie-Leiste!
+  </div>
+  <button id="start-btn">🎮 Spiel starten</button>
+</div>
+
+<script>
+// ========================================================================
+// KONFIGURATION – Alle wichtigen Spielparameter zentral einstellbar
+// ========================================================================
+const CONFIG = {
+  // Raster-Größe
+  GRID_COLS: 10,
+  GRID_ROWS: 10,
+
+  // Unkraut-Wachstum
+  BASE_SPAWN_INTERVAL: 2500,    // ms – Basis-Intervall für neues Unkraut
+  MIN_SPAWN_INTERVAL: 400,      // ms – Minimaler Spawn-Intervall
+  GROWTH_TICK_MS: 3000,         // ms – Wie oft Unkraut eine Stufe wächst
+  GROWTH_RATE_INCREASE: 0.0004, // Wie schnell growth_rate steigt pro Frame
+  INITIAL_GROWTH_RATE: 1.0,     // Start-Multiplikator
+
+  // Stadien: 0=leer, 1=Keimling, 2=Klein, 3=Reif, 4=Wuchernd
+  MAX_STAGE: 4,
+
+  // Punkte pro Ernte nach Stadium
+  SCORE_PER_STAGE: [0, 10, 25, 50, 100],
+
+  // Energie
+  ENERGY_PER_HARVEST: [0, 5, 8, 12, 20],
+  MAX_ENERGY: 100,
+
+  // Superwaffen Energie-Kosten
+  ABFLAMMER_COST: 100,
+  SPRAY_COST: 60,
+  STAMPFER_COST: 40,
+
+  // Spray-Dauer
+  SPRAY_DURATION: 10000, // ms
+
+  // Verwucherung – Game Over wenn 100%
+  OVERGROWTH_THRESHOLD: 1.0,
+
+  // Löwenzahn-Wahrscheinlichkeit (0-1)
+  DANDELION_CHANCE: 0.25,
+
+  // Root regrow speed multiplier für Löwenzahn nach Hand-Ernte
+  ROOT_REGROW_MULT: 3.0,
+
+  // Achievements
+  ACHIEVEMENTS: [
+    { count: 10, text: "🌱 Anfänger-Gärtner! 10 Unkräuter entfernt" },
+    { count: 50, text: "🌿 Fleißiger Jäter! 50 Unkräuter entfernt" },
+    { count: 100, text: "🏆 Fugen-Meister! 100 Unkräuter entfernt" },
+    { count: 250, text: "⭐ Pflaster-Profi! 250 Unkräuter entfernt" },
+    { count: 500, text: "🔥 Unkraut-Vernichter! 500 Unkräuter entfernt" },
+    { count: 1000, text: "👑 Legende! 1000 Unkräuter entfernt" },
+  ],
+
+  // Pflasterstein-Skins
+  STONE_SKINS: [
+    { name:"Betongrau", base:"#a0a0a0", dark:"#888888", light:"#b8b8b8", joint:"#666" },
+    { name:"Anthrazit", base:"#5a5a5a", dark:"#444444", light:"#727272", joint:"#333" },
+    { name:"Klinker",   base:"#b06040", dark:"#8a4a30", light:"#c87858", joint:"#553322" },
+  ],
+  STONE_TYPES: ["rect", "hex", "s-stein"],
+
+  // Partikel
+  PARTICLE_COUNT: 12,
+  PARTICLE_LIFETIME: 600, // ms
+};
+
+// ========================================================================
+// GLOBALER SPIELZUSTAND
+// ========================================================================
+let state = {};
+let audioCtx = null;
+let isMuted = false;
+let isMobile = false;
+let canvas, ctx;
+let animId = null;
+
+// ========================================================================
+// INITIALISIERUNG
+// ========================================================================
+function initState() {
+  state = {
+    grid: [],           // 2D-Array [row][col] mit Zellenobjekten
+    score: 0,
+    energy: 0,
+    growthRate: CONFIG.INITIAL_GROWTH_RATE,
+    totalHarvested: 0,
+    activeTool: 0,      // 0=Hand, 1=Wurzelstecher
+    gameOver: false,
+    gameStarted: false,
+    lastSpawn: 0,
+    lastGrowth: 0,
+    sprayActive: false,
+    sprayEnd: 0,
+    stoneSkin: CONFIG.STONE_SKINS[Math.floor(Math.random()*CONFIG.STONE_SKINS.length)],
+    stoneType: CONFIG.STONE_TYPES[Math.floor(Math.random()*CONFIG.STONE_TYPES.length)],
+    particles: [],
+    achievements: CONFIG.ACHIEVEMENTS.map(a=>({...a, shown:false})),
+    shakeAmount: 0,
+    shakeEnd: 0,
+    hoveredCell: null,
+    time: 0,
+    freezeOverlay: 0,
+    fireOverlay: 0,
+  };
+
+  // Raster initialisieren
+  for (let r = 0; r < CONFIG.GRID_ROWS; r++) {
+    state.grid[r] = [];
+    for (let c = 0; c < CONFIG.GRID_COLS; c++) {
+      state.grid[r][c] = {
+        stage: 0,          // 0=leer
+        type: "none",      // "grass", "dandelion", "none"
+        hasRoot: false,    // Löwenzahn-Wurzel nach Hand-Ernte
+        growTimer: 0,      // Wachstums-Timer
+        rootMult: 1,       // Nachwachs-Multiplikator
+      };
+    }
+  }
+}
+
+// ========================================================================
+// AUDIO-SYSTEM – Prozedurale Sounds via Web Audio API
+// ========================================================================
+function initAudio() {
+  if (audioCtx) return;
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  } catch(e) { audioCtx = null; }
+}
+
+// Befriedigendes "Plopp"-Geräusch beim Ernten
+function playHarvestSound() {
+  if (!audioCtx || isMuted) return;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(600, audioCtx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(200, audioCtx.currentTime + 0.15);
+  gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start(); osc.stop(audioCtx.currentTime + 0.2);
+}
+
+// Feuer-Sound für Abflammer
+function playFireSound() {
+  if (!audioCtx || isMuted) return;
+  const bufferSize = audioCtx.sampleRate * 0.6;
+  const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) {
+    data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize) * 0.25;
+  }
+  const src = audioCtx.createBufferSource();
+  const filt = audioCtx.createBiquadFilter();
+  filt.type = "lowpass"; filt.frequency.value = 800;
+  src.buffer = buffer;
+  src.connect(filt).connect(audioCtx.destination);
+  src.start();
+}
+
+// Spray-Sound
+function playSpraySound() {
+  if (!audioCtx || isMuted) return;
+  const bufferSize = audioCtx.sampleRate * 0.5;
+  const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) {
+    data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize) * 0.15;
+  }
+  const src = audioCtx.createBufferSource();
+  const filt = audioCtx.createBiquadFilter();
+  filt.type = "highpass"; filt.frequency.value = 2000;
+  src.buffer = buffer;
+  src.connect(filt).connect(audioCtx.destination);
+  src.start();
+}
+
+// Stampfer-Sound
+function playStampSound() {
+  if (!audioCtx || isMuted) return;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = "square";
+  osc.frequency.setValueAtTime(80, audioCtx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(30, audioCtx.currentTime + 0.3);
+  gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start(); osc.stop(audioCtx.currentTime + 0.35);
+}
+
+// Ambient-Sound (zufällige Vogelzirp-Sounds)
+let ambientInterval = null;
+function startAmbient() {
+  if (!audioCtx || isMuted) return;
+  stopAmbient();
+  ambientInterval = setInterval(() => {
+    if (isMuted || !audioCtx || state.gameOver) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = "sine";
+    const f = 2000 + Math.random() * 2000;
+    osc.frequency.setValueAtTime(f, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(f * (0.8 + Math.random() * 0.4), audioCtx.currentTime + 0.15);
+    gain.gain.setValueAtTime(0.03, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start(); osc.stop(audioCtx.currentTime + 0.25);
+  }, 3000 + Math.random() * 4000);
+}
+function stopAmbient() { if (ambientInterval) { clearInterval(ambientInterval); ambientInterval = null; } }
+
+// ========================================================================
+// ISOMETRISCHE BERECHNUNGEN
+// ========================================================================
+let tileW, tileH, originX, originY;
+
+function calcIsometrics() {
+  const w = canvas.width;
+  const h = canvas.height;
+  const hudH = 50;
+  const toolbarW = isMobile ? 0 : 80;
+  const toolbarH = isMobile ? 80 : 0;
+  const availW = w - toolbarW - 40;
+  const availH = h - hudH - toolbarH - 40;
+
+  // Optimale Tile-Größe berechnen
+  const maxTileW = availW / (CONFIG.GRID_COLS + CONFIG.GRID_ROWS) * 2 * 0.9;
+  const maxTileH = availH / (CONFIG.GRID_COLS + CONFIG.GRID_ROWS) * 2 * 0.9;
+  tileW = Math.min(maxTileW, maxTileH * 2);
+  tileH = tileW / 2;
+
+  // Mittelpunkt
+  originX = (w - toolbarW) / 2;
+  originY = hudH + 30 + (availH - (CONFIG.GRID_ROWS + CONFIG.GRID_COLS) * tileH / 2) / 2;
+}
+
+// Grid -> Bildschirm
+function gridToScreen(r, c) {
+  const x = originX + (c - r) * tileW / 2;
+  const y = originY + (c + r) * tileH / 2;
+  return { x, y };
+}
+
+// Bildschirm -> Grid
+function screenToGrid(sx, sy) {
+  const dx = sx - originX;
+  const dy = sy - originY;
+  const c = (dx / (tileW / 2) + dy / (tileH / 2)) / 2;
+  const r = (dy / (tileH / 2) - dx / (tileW / 2)) / 2;
+  return { r: Math.floor(r), c: Math.floor(c) };
+}
+
+// Punkt-in-Raute-Test
+function isInTile(sx, sy, r, c) {
+  const { x, y } = gridToScreen(r, c);
+  const dx = Math.abs(sx - x);
+  const dy = Math.abs(sy - y);
+  const mult = isMobile ? 1.15 : 1.0;
+  return (dx / (tileW / 2 * mult) + dy / (tileH / 2 * mult)) <= 1;
+}
+
+// ========================================================================
+// RENDERING – Prozedurale Grafiken
+// ========================================================================
+
+// Pflasterstein (isometrische Raute)
+function drawTile(r, c) {
+  const { x, y } = gridToScreen(r, c);
+  const skin = state.stoneSkin;
+  const hw = tileW / 2 - 1;
+  const hh = tileH / 2 - 1;
+
+  // Fuge
+  ctx.beginPath();
+  ctx.moveTo(x, y - tileH/2);
+  ctx.lineTo(x + tileW/2, y);
+  ctx.lineTo(x, y + tileH/2);
+  ctx.lineTo(x - tileW/2, y);
+  ctx.closePath();
+  ctx.fillStyle = skin.joint;
+  ctx.fill();
+
+  // Steinoberfläche
+  const inset = 2;
+  const ihw = hw - inset;
+  const ihh = hh - inset;
+
+  ctx.beginPath();
+  ctx.moveTo(x, y - ihh);
+  ctx.lineTo(x + ihw, y);
+  ctx.lineTo(x, y + ihh);
+  ctx.lineTo(x - ihw, y);
+  ctx.closePath();
+
+  // 3D-Gradient
+  const grad = ctx.createLinearGradient(x - ihw, y - ihh, x + ihw, y + ihh);
+  grad.addColorStop(0, skin.light);
+  grad.addColorStop(0.5, skin.base);
+  grad.addColorStop(1, skin.dark);
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Steinmuster
+  ctx.save();
+  ctx.globalAlpha = 0.15;
+  if (state.stoneType === "rect") {
+    ctx.strokeStyle = skin.dark;
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(x - ihw * 0.5, y - ihh * 0.5);
+    ctx.lineTo(x + ihw * 0.5, y + ihh * 0.5);
+    ctx.moveTo(x + ihw * 0.5, y - ihh * 0.5);
+    ctx.lineTo(x - ihw * 0.5, y + ihh * 0.5);
+    ctx.stroke();
+  } else if (state.stoneType === "hex") {
+    ctx.strokeStyle = skin.dark;
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const angle = Math.PI / 3 * i - Math.PI / 6;
+      const px = x + Math.cos(angle) * ihw * 0.4;
+      const py = y + Math.sin(angle) * ihh * 0.4;
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.stroke();
+  } else {
+    ctx.strokeStyle = skin.dark;
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(x - ihw * 0.6, y);
+    ctx.quadraticCurveTo(x, y - ihh * 0.5, x + ihw * 0.6, y);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Hover-Effekt
+  if (state.hoveredCell && state.hoveredCell.r === r && state.hoveredCell.c === c) {
+    ctx.beginPath();
+    ctx.moveTo(x, y - ihh);
+    ctx.lineTo(x + ihw, y);
+    ctx.lineTo(x, y + ihh);
+    ctx.lineTo(x - ihw, y);
+    ctx.closePath();
+    ctx.fillStyle = "rgba(255,255,255,0.12)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,0.4)";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+}
+
+// Unkraut zeichnen
+function drawWeed(r, c) {
+  const cell = state.grid[r][c];
+  if (cell.stage === 0 && !cell.hasRoot) return;
+
+  const { x, y } = gridToScreen(r, c);
+  const s = cell.stage;
+  const t = performance.now() / 1000;
+
+  // Wind-Schwankung
+  const sway = Math.sin(t * 2 + r * 3 + c * 7) * (s * 0.5);
+
+  ctx.save();
+  ctx.translate(x + sway, y);
+
+  if (cell.stage === 0 && cell.hasRoot) {
+    // Wurzel-Indikator
+    ctx.beginPath();
+    ctx.arc(0, 2, 3, 0, Math.PI * 2);
+    ctx.fillStyle = "#8B4513";
+    ctx.fill();
+    ctx.restore();
+    return;
+  }
+
+  if (cell.type === "grass") {
+    drawGrassWeed(s, t, r, c);
+  } else if (cell.type === "dandelion") {
+    drawDandelion(s, t, r, c);
+  }
+
+  ctx.restore();
+}
+
+// Gras-Unkraut
+function drawGrassWeed(stage, t, r, c) {
+  const baseH = tileH * 0.15;
+  ctx.strokeStyle = stage >= 3 ? "#2d7a1e" : "#4a9e3a";
+  ctx.lineCap = "round";
+
+  const blades = stage + 1;
+  for (let i = 0; i < blades; i++) {
+    const angle = (i / blades - 0.5) * 1.2;
+    const h = baseH * stage * (0.7 + 0.05);
+    const sw = Math.sin(t * 1.5 + i + r + c) * (stage * 1.5);
+
+    ctx.lineWidth = Math.max(1, stage * 0.8);
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.quadraticCurveTo(
+      Math.sin(angle) * h * 0.6 + sw,
+      -h * 0.6,
+      Math.sin(angle) * h + sw * 1.5,
+      -h
+    );
+    ctx.stroke();
+
+    if (stage >= 3) {
+      const ex = Math.sin(angle) * h + sw * 1.5;
+      const ey = -h;
+      ctx.fillStyle = "#1e5f14";
+      ctx.beginPath();
+      ctx.ellipse(ex, ey, 2, 4, angle, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Wucherndes Stadium
+  if (stage >= 4) {
+    ctx.fillStyle = "rgba(34, 120, 20, 0.5)";
+    ctx.beginPath();
+    ctx.ellipse(0, -baseH * 2, tileW * 0.2, tileH * 0.25, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    for (let i = 0; i < 3; i++) {
+      const bx = (Math.sin(i * 2.1 + r) * tileW * 0.12);
+      const by = (-baseH * 2 + Math.cos(i * 1.7 + c) * tileH * 0.12);
+      ctx.fillStyle = "#fff";
+      ctx.beginPath();
+      ctx.arc(bx, by, 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
+// Löwenzahn
+function drawDandelion(stage, t, r, c) {
+  const baseH = tileH * 0.15;
+  const h = baseH * stage;
+
+  // Stängel
+  ctx.strokeStyle = "#5a8a30";
+  ctx.lineWidth = Math.max(1.5, stage);
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  const sw = Math.sin(t * 1.3 + r * 2 + c) * (stage);
+  ctx.quadraticCurveTo(sw * 0.5, -h * 0.5, sw, -h);
+  ctx.stroke();
+
+  // Blätter am Boden (ab Stadium 2)
+  if (stage >= 2) {
+    ctx.fillStyle = "#3d7a22";
+    for (let i = 0; i < 3; i++) {
+      const la = (i / 3) * Math.PI * 2 + t * 0.2;
+      ctx.beginPath();
+      ctx.ellipse(
+        Math.cos(la) * 6, Math.sin(la) * 3,
+        8, 2.5, la, 0, Math.PI * 2
+      );
+      ctx.fill();
+    }
+  }
+
+  const bx = sw;
+  const by = -h;
+  if (stage === 3) {
+    // Gelbe Blüte
+    ctx.fillStyle = "#ffd700";
+    for (let p = 0; p < 8; p++) {
+      const pa = (p / 8) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.ellipse(bx + Math.cos(pa) * 4, by + Math.sin(pa) * 4, 3, 1.5, pa, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = "#c8a800";
+    ctx.beginPath();
+    ctx.arc(bx, by, 3, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (stage >= 4) {
+    // Pusteblume
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
+    for (let p = 0; p < 12; p++) {
+      const pa = (p / 12) * Math.PI * 2 + Math.sin(t + p) * 0.1;
+      const pr = 7 + Math.sin(t * 2 + p) * 1;
+      ctx.beginPath();
+      ctx.arc(bx + Math.cos(pa) * pr, by + Math.sin(pa) * pr, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(200,200,200,0.5)";
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(bx, by);
+      ctx.lineTo(bx + Math.cos(pa) * pr, by + Math.sin(pa) * pr);
+      ctx.stroke();
+    }
+    ctx.fillStyle = "#aaa";
+    ctx.beginPath();
+    ctx.arc(bx, by, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (stage === 1) {
+    // Keimling
+    ctx.fillStyle = "#6ab04c";
+    ctx.beginPath();
+    ctx.ellipse(sw, -h - 2, 3, 2, 0.3, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (stage === 2) {
+    // Knospe
+    ctx.fillStyle = "#7ec850";
+    ctx.beginPath();
+    ctx.arc(bx, by, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// Partikel
+function drawParticles() {
+  const now = performance.now();
+  state.particles = state.particles.filter(p => now - p.born < p.life);
+  for (const p of state.particles) {
+    const age = (now - p.born) / p.life;
+    if (age < 0) continue; // Noch nicht gestartet
+    const alpha = 1 - age;
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vy += 0.08;
+
+    ctx.globalAlpha = Math.max(0, alpha);
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size * (1 - age * 0.5), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// Ernte-Partikel
+function spawnHarvestParticles(x, y, type) {
+  const colors = type === "dandelion"
+    ? ["#ffd700","#fff","#ffe066","#c8a800"]
+    : ["#4a9e3a","#2d7a1e","#7ec850","#5a8a30","#8B4513"];
+  for (let i = 0; i < CONFIG.PARTICLE_COUNT; i++) {
+    state.particles.push({
+      x, y,
+      vx: (Math.random() - 0.5) * 4,
+      vy: -Math.random() * 4 - 1,
+      size: 2 + Math.random() * 3,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      born: performance.now(),
+      life: CONFIG.PARTICLE_LIFETIME + Math.random() * 200,
+    });
+  }
+}
+
+// Feuer-Partikel (Abflammer)
+function spawnFireParticles() {
+  for (let r = 0; r < CONFIG.GRID_ROWS; r++) {
+    for (let c = 0; c < CONFIG.GRID_COLS; c++) {
+      const { x, y } = gridToScreen(r, c);
+      for (let i = 0; i < 3; i++) {
+        state.particles.push({
+          x: x + (Math.random() - 0.5) * tileW * 0.5,
+          y: y + (Math.random() - 0.5) * tileH * 0.5,
+          vx: (Math.random() - 0.5) * 2,
+          vy: -Math.random() * 5 - 2,
+          size: 3 + Math.random() * 4,
+          color: ["#ff4500","#ff6600","#ffaa00","#ff2200","#ffcc00"][Math.floor(Math.random()*5)],
+          born: performance.now() + Math.random() * 400,
+          life: 600 + Math.random() * 400,
+        });
+      }
+    }
+  }
+}
+
+// ========================================================================
+// SPIELLOGIK
+// ========================================================================
+
+// Unkraut spawnen
+function spawnWeed(now) {
+  const interval = Math.max(
+    CONFIG.MIN_SPAWN_INTERVAL,
+    CONFIG.BASE_SPAWN_INTERVAL / state.growthRate
+  );
+  if (now - state.lastSpawn < interval) return;
+  state.lastSpawn = now;
+
+  const free = [];
+  const rooted = [];
+  for (let r = 0; r < CONFIG.GRID_ROWS; r++) {
+    for (let c = 0; c < CONFIG.GRID_COLS; c++) {
+      if (state.grid[r][c].stage === 0 && !state.grid[r][c].hasRoot) free.push({r,c});
+      if (state.grid[r][c].hasRoot && state.grid[r][c].stage === 0) rooted.push({r,c});
+    }
+  }
+
+  // Wurzel-Zellen haben Priorität
+  if (rooted.length > 0 && Math.random() < 0.6) {
+    const cell = rooted[Math.floor(Math.random() * rooted.length)];
+    const g = state.grid[cell.r][cell.c];
+    g.stage = 1;
+    g.type = "dandelion";
+    g.growTimer = now;
+    g.rootMult = CONFIG.ROOT_REGROW_MULT;
+    return;
+  }
+
+  if (free.length === 0) return;
+
+  const cell = free[Math.floor(Math.random() * free.length)];
+  const g = state.grid[cell.r][cell.c];
+  g.stage = 1;
+  g.type = Math.random() < CONFIG.DANDELION_CHANCE ? "dandelion" : "grass";
+  g.growTimer = now;
+  g.hasRoot = false;
+  g.rootMult = 1;
+}
+
+// Unkraut wachsen lassen
+function growWeeds(now) {
+  if (state.sprayActive && now < state.sprayEnd) return;
+  if (state.sprayActive && now >= state.sprayEnd) state.sprayActive = false;
+
+  const interval = CONFIG.GROWTH_TICK_MS / state.growthRate;
+  for (let r = 0; r < CONFIG.GRID_ROWS; r++) {
+    for (let c = 0; c < CONFIG.GRID_COLS; c++) {
+      const cell = state.grid[r][c];
+      if (cell.stage > 0 && cell.stage < CONFIG.MAX_STAGE) {
+        const growInterval = interval / cell.rootMult;
+        if (now - cell.growTimer > growInterval) {
+          cell.stage++;
+          cell.growTimer = now;
+        }
+      }
+    }
+  }
+}
+
+// Verwucherungsgrad
+function calcOvergrowth() {
+  let total = CONFIG.GRID_ROWS * CONFIG.GRID_COLS;
+  let overgrown = 0;
+  for (let r = 0; r < CONFIG.GRID_ROWS; r++) {
+    for (let c = 0; c < CONFIG.GRID_COLS; c++) {
+      const s = state.grid[r][c].stage;
+      if (s > 0) overgrown += s / CONFIG.MAX_STAGE;
+    }
+  }
+  return overgrown / total;
+}
+
+// Ernte
+function harvestCell(r, c) {
+  const cell = state.grid[r][c];
+  if (cell.stage === 0) return false;
+
+  const { x, y } = gridToScreen(r, c);
+  const score = CONFIG.SCORE_PER_STAGE[cell.stage] || 0;
+  const energy = CONFIG.ENERGY_PER_HARVEST[cell.stage] || 0;
+
+  if (cell.type === "dandelion" && state.activeTool === 0) {
+    // Hand: nur oberirdisch, Wurzel bleibt
+    spawnHarvestParticles(x, y, "dandelion");
+    playHarvestSound();
+    cell.stage = 0;
+    cell.hasRoot = true;
+    cell.rootMult = CONFIG.ROOT_REGROW_MULT;
+  } else {
+    // Wurzelstecher oder normales Gras: komplett
+    spawnHarvestParticles(x, y, cell.type);
+    playHarvestSound();
+    cell.stage = 0;
+    cell.type = "none";
+    cell.hasRoot = false;
+    cell.rootMult = 1;
+  }
+
+  state.score += score;
+  state.energy = Math.min(CONFIG.MAX_ENERGY, state.energy + energy);
+  state.totalHarvested++;
+  checkAchievements();
+  return true;
+}
+
+// ========================================================================
+// SUPERWAFFEN
+// ========================================================================
+
+function activateAbflammer() {
+  if (state.energy < CONFIG.ABFLAMMER_COST) return;
+  state.energy -= CONFIG.ABFLAMMER_COST;
+  playFireSound();
+
+  for (let r = 0; r < CONFIG.GRID_ROWS; r++) {
+    for (let c = 0; c < CONFIG.GRID_COLS; c++) {
+      const cell = state.grid[r][c];
+      if (cell.stage > 0) {
+        state.score += CONFIG.SCORE_PER_STAGE[cell.stage] || 0;
+        state.totalHarvested++;
+        cell.stage = 0;
+        cell.type = "none";
+        cell.hasRoot = false;
+        cell.rootMult = 1;
+      }
+    }
+  }
+
+  spawnFireParticles();
+  state.fireOverlay = 0.5;
+  state.shakeAmount = 8;
+  state.shakeEnd = performance.now() + 500;
+  checkAchievements();
+}
+
+function activateSpray() {
+  if (state.energy < CONFIG.SPRAY_COST) return;
+  state.energy -= CONFIG.SPRAY_COST;
+  playSpraySound();
+  state.sprayActive = true;
+  state.sprayEnd = performance.now() + CONFIG.SPRAY_DURATION;
+  state.freezeOverlay = 0.2;
+}
+
+function activateStampfer() {
+  if (state.energy < CONFIG.STAMPFER_COST) return;
+  state.energy -= CONFIG.STAMPFER_COST;
+  playStampSound();
+
+  for (let r = 0; r < CONFIG.GRID_ROWS; r++) {
+    for (let c = 0; c < CONFIG.GRID_COLS; c++) {
+      const cell = state.grid[r][c];
+      if (cell.stage === 1) {
+        const { x, y } = gridToScreen(r, c);
+        spawnHarvestParticles(x, y, cell.type);
+        state.score += CONFIG.SCORE_PER_STAGE[1];
+        state.totalHarvested++;
+        cell.stage = 0;
+        cell.type = "none";
+        cell.hasRoot = false;
+        cell.rootMult = 1;
+      }
+    }
+  }
+
+  state.shakeAmount = 4;
+  state.shakeEnd = performance.now() + 300;
+  checkAchievements();
+}
+
+// ========================================================================
+// ACHIEVEMENTS
+// ========================================================================
+function checkAchievements() {
+  for (const a of state.achievements) {
+    if (!a.shown && state.totalHarvested >= a.count) {
+      a.shown = true;
+      showAchievement(a.text);
+    }
+  }
+}
+
+function showAchievement(text) {
+  const div = document.createElement("div");
+  div.className = "achievement";
+  div.textContent = text;
+  document.body.appendChild(div);
+  setTimeout(() => div.remove(), 3200);
+}
+
+// ========================================================================
+// UI UPDATES
+// ========================================================================
+function updateHUD() {
+  document.getElementById("score-display").textContent = state.score.toLocaleString("de-DE");
+  document.getElementById("energy-bar").style.width = (state.energy / CONFIG.MAX_ENERGY * 100) + "%";
+
+  const og = calcOvergrowth();
+  document.getElementById("overgrowth-bar").style.width = (og * 100) + "%";
+  document.getElementById("overgrowth-pct").textContent = Math.round(og * 100) + "%";
+
+  const abf = document.getElementById("btn-abflammer");
+  const spr = document.getElementById("btn-spray");
+  const stm = document.getElementById("btn-stampfer");
+  if (abf) abf.className = "super-btn" + (state.energy >= CONFIG.ABFLAMMER_COST ? " ready" : "");
+  if (spr) spr.className = "super-btn" + (state.energy >= CONFIG.SPRAY_COST ? " ready" : "");
+  if (stm) stm.className = "super-btn" + (state.energy >= CONFIG.STAMPFER_COST ? " ready" : "");
+
+  document.querySelectorAll(".tool-btn").forEach((btn, i) => {
+    btn.className = "tool-btn" + (i === state.activeTool ? " active" : "");
+  });
+}
+
+function buildToolbar() {
+  const toolbar = document.getElementById("toolbar");
+  toolbar.className = isMobile ? "mobile" : "desktop";
+  toolbar.innerHTML = `
+    <button class="tool-btn active" onclick="setTool(0)"><span class="key">1</span><span class="icon">✋</span><span>Hand</span></button>
+    <button class="tool-btn" onclick="setTool(1)"><span class="key">2</span><span class="icon">🔧</span><span>Stecher</span></button>
+  `;
+
+  const superBar = document.getElementById("super-toolbar");
+  superBar.className = isMobile ? "mobile" : "desktop";
+  superBar.innerHTML = `
+    <button class="super-btn" id="btn-abflammer" onclick="activateAbflammer()" title="Abflammer (${CONFIG.ABFLAMMER_COST} Energie)"><span class="icon">🔥</span><span>Q</span></button>
+    <button class="super-btn" id="btn-spray" onclick="activateSpray()" title="Spray (${CONFIG.SPRAY_COST} Energie)"><span class="icon">❄️</span><span>W</span></button>
+    <button class="super-btn" id="btn-stampfer" onclick="activateStampfer()" title="Stampfer (${CONFIG.STAMPFER_COST} Energie)"><span class="icon">⚡</span><span>E</span></button>
+  `;
+}
+
+function setTool(idx) { state.activeTool = idx; }
+
+// ========================================================================
+// HAUPT-GAME-LOOP
+// ========================================================================
+function gameLoop(timestamp) {
+  if (!state.gameStarted || state.gameOver) return;
+  animId = requestAnimationFrame(gameLoop);
+
+  const now = performance.now();
+
+  // Schwierigkeit exponentiell steigern
+  state.growthRate += CONFIG.GROWTH_RATE_INCREASE;
+
+  spawnWeed(now);
+  growWeeds(now);
+
+  // Game Over?
+  const og = calcOvergrowth();
+  if (og >= CONFIG.OVERGROWTH_THRESHOLD) {
+    state.gameOver = true;
+    document.getElementById("final-score").textContent = state.score.toLocaleString("de-DE");
+    document.getElementById("game-over").style.display = "flex";
+    stopAmbient();
+    return;
+  }
+
+  // === RENDERING ===
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Hintergrund
+  const bgGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  bgGrad.addColorStop(0, "#2c3e50");
+  bgGrad.addColorStop(1, "#1a1a2e");
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Screen-Shake
+  ctx.save();
+  if (now < state.shakeEnd) {
+    const shake = state.shakeAmount * (1 - (now - (state.shakeEnd - 500)) / 500);
+    ctx.translate(
+      (Math.random() - 0.5) * shake * 2,
+      (Math.random() - 0.5) * shake * 2
+    );
+  }
+
+  // Tiles + Unkraut (hinten nach vorne)
+  for (let r = 0; r < CONFIG.GRID_ROWS; r++) {
+    for (let c = 0; c < CONFIG.GRID_COLS; c++) {
+      drawTile(r, c);
+      drawWeed(r, c);
+    }
+  }
+
+  // Partikel
+  drawParticles();
+
+  // Overlays
+  if (state.fireOverlay > 0) {
+    ctx.fillStyle = `rgba(255, 80, 0, ${state.fireOverlay})`;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    state.fireOverlay = Math.max(0, state.fireOverlay - 0.008);
+  }
+  if (state.sprayActive) {
+    state.freezeOverlay = 0.08 + Math.sin(now / 300) * 0.04;
+    ctx.fillStyle = `rgba(100, 180, 255, ${state.freezeOverlay})`;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const remaining = Math.max(0, (state.sprayEnd - now) / 1000);
+    ctx.fillStyle = "#aaddff";
+    ctx.font = "bold 16px Segoe UI, Arial";
+    ctx.textAlign = "center";
+    ctx.fillText(`❄️ Spray aktiv: ${remaining.toFixed(1)}s`, canvas.width / 2, canvas.height - (isMobile ? 100 : 20));
+  }
+
+  ctx.restore();
+  updateHUD();
+}
+
+// ========================================================================
+// INPUT-HANDLING
+// ========================================================================
+function handleClick(sx, sy) {
+  if (state.gameOver || !state.gameStarted) return;
+  initAudio();
+
+  for (let r = 0; r < CONFIG.GRID_ROWS; r++) {
+    for (let c = 0; c < CONFIG.GRID_COLS; c++) {
+      if (isInTile(sx, sy, r, c)) {
+        harvestCell(r, c);
+        return;
+      }
+    }
+  }
+}
+
+function handleMove(sx, sy) {
+  if (state.gameOver) return;
+  state.hoveredCell = null;
+  for (let r = 0; r < CONFIG.GRID_ROWS; r++) {
+    for (let c = 0; c < CONFIG.GRID_COLS; c++) {
+      if (isInTile(sx, sy, r, c)) {
+        state.hoveredCell = { r, c };
+        return;
+      }
+    }
+  }
+}
+
+// ========================================================================
+// EVENT LISTENERS
+// ========================================================================
+function setupEvents() {
+  canvas.addEventListener("click", e => {
+    const rect = canvas.getBoundingClientRect();
+    handleClick(e.clientX - rect.left, e.clientY - rect.top);
+  });
+
+  canvas.addEventListener("mousemove", e => {
+    const rect = canvas.getBoundingClientRect();
+    handleMove(e.clientX - rect.left, e.clientY - rect.top);
+  });
+
+  canvas.addEventListener("touchstart", e => {
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const t = e.touches[0];
+    handleClick(t.clientX - rect.left, t.clientY - rect.top);
+  }, { passive: false });
+
+  canvas.addEventListener("touchmove", e => {
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const t = e.touches[0];
+    handleMove(t.clientX - rect.left, t.clientY - rect.top);
+  }, { passive: false });
+
+  // Tastatur-Shortcuts
+  window.addEventListener("keydown", e => {
+    if (state.gameOver) return;
+    switch(e.key) {
+      case "1": setTool(0); break;
+      case "2": setTool(1); break;
+      case "q": case "Q": activateAbflammer(); break;
+      case "w": case "W": activateSpray(); break;
+      case "e": case "E": activateStampfer(); break;
+    }
+  });
+
+  // Mute-Button
+  document.getElementById("mute-btn").addEventListener("click", () => {
+    isMuted = !isMuted;
+    document.getElementById("mute-btn").textContent = isMuted ? "🔇" : "🔊";
+    if (isMuted) stopAmbient(); else startAmbient();
+  });
+
+  // Resize
+  window.addEventListener("resize", resizeCanvas);
+}
+
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  isMobile = window.innerWidth < 768 || "ontouchstart" in window;
+  calcIsometrics();
+  buildToolbar();
+}
+
+// ========================================================================
+// SPIEL STARTEN / NEU STARTEN
+// ========================================================================
+function startGame() {
+  document.getElementById("start-screen").style.display = "none";
+  document.getElementById("game-over").style.display = "none";
+  initState();
+  resizeCanvas();
+  state.gameStarted = true;
+  state.lastSpawn = performance.now();
+  initAudio();
+  startAmbient();
+  if (animId) cancelAnimationFrame(animId);
+  requestAnimationFrame(gameLoop);
+}
+
+// ========================================================================
+// INIT
+// ========================================================================
+window.addEventListener("load", () => {
+  canvas = document.getElementById("gameCanvas");
+  ctx = canvas.getContext("2d");
+  resizeCanvas();
+  setupEvents();
+
+  document.getElementById("start-btn").addEventListener("click", startGame);
+  document.getElementById("restart-btn").addEventListener("click", startGame);
+});
+</script>
+</body>
+</html>
