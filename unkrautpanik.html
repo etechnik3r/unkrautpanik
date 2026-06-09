@@ -154,9 +154,22 @@ h1 { font-size:42px; margin-bottom:10px; text-align:center; }
 
 <div id="game-over">
   <h1 style="color:#e74c3c;">🌿 GAME OVER 🌿</h1>
-  <div style="font-size:16px; color:#aaa; margin-bottom:30px;">Der Hof ist komplett zugewuchert!</div>
-  <div style="font-size:60px; color:#f7b733; font-weight:700;" id="final-score">0</div><br>
+  <div style="font-size:16px; color:#aaa; margin-bottom:20px;">Der Hof ist komplett zugewuchert!</div>
+  <div style="font-size:60px; color:#f7b733; font-weight:700;" id="final-score">0</div>
+  <div id="new-record" style="display:none; color:#56ab2f; font-weight:700; font-size:18px; margin-top:6px;">🏆 Neuer Rekord!</div>
+  <div style="color:#888; font-size:14px; margin-top:4px;">Bestwert: <span id="best-score-go">0</span></div>
+  <div id="go-summary" style="display:flex; gap:24px; margin:22px 0 28px; color:#ccc; font-size:14px; flex-wrap:wrap; justify-content:center;">
+    <div>⏱️ <span class="stat-val" id="go-time">00:00</span><div style="color:#777;font-size:11px;">Überlebt</div></div>
+    <div>🌿 <span class="stat-val" id="go-removed">0</span><div style="color:#777;font-size:11px;">Entfernt</div></div>
+    <div>🏆 <span class="stat-val" id="go-trophies">0</span><div style="color:#777;font-size:11px;">Trophäen</div></div>
+  </div>
   <button id="restart-btn" class="btn-large">🔄 Nochmal spielen</button>
+</div>
+
+<div id="pause-screen" style="position:fixed; top:0; left:0; width:100%; height:100%; display:none; flex-direction:column; align-items:center; justify-content:center; background:rgba(10,10,16,0.85); color:#e0e0e0; z-index:250;">
+  <h1 style="color:#f7b733;">⏸️ Pause</h1>
+  <div style="font-size:15px; color:#999; margin-bottom:24px;">Drücke <b>P</b> oder <b>Esc</b> zum Fortsetzen</div>
+  <button id="resume-btn" class="btn-large" style="border-color:#56ab2f; color:#56ab2f;">▶️ Weiter</button>
 </div>
 
 <div id="start-screen">
@@ -167,8 +180,10 @@ h1 { font-size:42px; margin-bottom:10px; text-align:center; }
     <b>Superwaffen (benötigen Energie/Zeit):</b><br>
     <b>[Q]</b> Abfackeln &nbsp; <b>[W]</b> Essigwasser (breitet sich fließend aus)<br>
     <b>[E]</b> Motorbürste (rodet 0,5s lang am Mauszeiger alles weg)<br>
-    <b>[R]</b> Giftspritze (Pflanzen verrotten)
+    <b>[R]</b> Giftspritze (Pflanzen verrotten)<br><br>
+    <b>[P]</b> / <b>[Esc]</b> Pause
   </div>
+  <div id="best-score-start" style="display:none; color:#f7b733; font-size:15px; margin-bottom:18px;">🏆 Bestwert: <span id="best-score-val">0</span></div>
   <button id="start-btn" class="btn-large">🎮 Spiel starten</button>
 </div>
 
@@ -183,7 +198,8 @@ const CONFIG = {
   ENERGY_PER_HARVEST: [0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,8],
   MAX_ENERGY: 100,
   ABFLAMMER_COST: 80, ESSIG_COST: 50, MOTOR_COST: 60,
-  OVERGROWTH_THRESHOLD: 1.0, ROOT_REGROW_MULT: 4.0,
+  OVERGROWTH_THRESHOLD: 0.85, ROOT_REGROW_MULT: 4.0,
+  HIGHSCORE_KEY: "unkrautpanik_highscore",
   POISON_CHARGE_TIME: 15000, POISON_MAX_SHOTS: 3, POISON_RADIUS: 1, POISON_DURATION: 12000,
   WEED_POOL: ["grass","grass","grass","grass","dandelion","dandelion","vogelmiere","vogelmiere","giersch","wegerich","brennnessel","distel","efeu","moos"],
   STONE_SKINS: [
@@ -208,6 +224,8 @@ let fireParticles = [];
 let poisonMode = false; let essigMode = false;
 let isDragging = false;
 let kratzerCooldown = 0; // ms
+let lastMotorSound = 0; // ms – drosselt den Motorbürsten-Sound
+let pauseStart = 0; // ms – Zeitpunkt des Pausenbeginns
 
 // SVG Icons
 const SVG_KRATZER = `<svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19L13 11"/><path d="M13 11L18 6" stroke-width="3"/><path d="M18 6L21 9L15 15"/></svg>`;
@@ -226,7 +244,7 @@ function initState() {
     ),
     score: 0, energy: 0, growthRate: CONFIG.INITIAL_GROWTH_RATE,
     totalHarvested: 0, activeTool: 0,
-    gameOver: false, gameStarted: false, lastSpawn: 0,
+    gameOver: false, gameStarted: false, paused: false, lastSpawn: 0,
     gameStartTime: 0, trophies: 0,
     stoneSkin: CONFIG.STONE_SKINS[0], stoneType: "rect",
     hoveredCell: null, fireOverlay: 0,
@@ -755,8 +773,7 @@ function gameLoop(timestamp) {
   let og=0;
   for(let r=0;r<CONFIG.GRID_ROWS;r++) for(let c=0;c<CONFIG.GRID_COLS;c++) og+=state.grid[r][c].stage/CONFIG.MAX_STAGE;
   if(og/(CONFIG.GRID_ROWS*CONFIG.GRID_COLS)>=CONFIG.OVERGROWTH_THRESHOLD) {
-    state.gameOver=true;document.getElementById("final-score").textContent=state.score;
-    document.getElementById("game-over").style.display="flex";return;
+    endGame(); return;
   }
   
   ctx.clearRect(0,0,canvas.width,canvas.height);
@@ -767,7 +784,7 @@ function gameLoop(timestamp) {
   if((poisonMode||essigMode)&&state.hoveredCell) {
     const {r,c}=state.hoveredCell;
     const targets = poisonMode ? 
-      [{r:r-1,c:c-1},{r:r-1,c},{r:r-1,c+1},{r,c-1},{r,c},{r,c+1},{r+1,c-1},{r+1,c},{r+1,c+1}] : 
+      [{r:r-1,c:c-1},{r:r-1,c:c},{r:r-1,c:c+1},{r:r,c:c-1},{r:r,c:c},{r:r,c:c+1},{r:r+1,c:c-1},{r:r+1,c:c},{r:r+1,c:c+1}] :
       [{r,c}]; // Essig zeigt nur Startfeld
       
     targets.forEach(t => {
@@ -782,10 +799,10 @@ function gameLoop(timestamp) {
 
   // Motorbürsten Visualisierung & Logik
   if(state.motorBrushActive && state.hoveredCell) {
-    playMotorSound();
+    if(now - lastMotorSound > 90) { playMotorSound(); lastMotorSound = now; }
     const {r,c} = state.hoveredCell;
     // 3 vertikale isometrische Felder
-    [{r:r-1,c:c-1},{r,c},{r+1,c+1}].forEach(t => {
+    [{r:r-1,c:c-1},{r:r,c:c},{r:r+1,c:c+1}].forEach(t => {
       if(t.r>=0&&t.r<CONFIG.GRID_ROWS&&t.c>=0&&t.c<CONFIG.GRID_COLS) {
         const s=gridToScreen(t.r,t.c); const hw=tileW/2-1,hh=tileH/2-1;
         ctx.beginPath();ctx.moveTo(s.x,s.y-hh);ctx.lineTo(s.x+hw,s.y);ctx.lineTo(s.x,s.y+hh);ctx.lineTo(s.x-hw,s.y);ctx.closePath();
@@ -801,6 +818,55 @@ function gameLoop(timestamp) {
   if(state.fireOverlay>0) { ctx.fillStyle=`rgba(255,80,0,${state.fireOverlay})`; ctx.fillRect(0,0,canvas.width,canvas.height); state.fireOverlay-=0.01; }
   updateHUD();
 }
+
+// HIGHSCORE (localStorage)
+function getHighscore() { try { return parseInt(localStorage.getItem(CONFIG.HIGHSCORE_KEY)) || 0; } catch(e) { return 0; } }
+function setHighscore(v) { try { localStorage.setItem(CONFIG.HIGHSCORE_KEY, v); } catch(e) {} }
+
+function endGame() {
+  state.gameOver = true;
+  const best = getHighscore();
+  const isRecord = state.score > best;
+  if(isRecord) setHighscore(state.score);
+  document.getElementById("final-score").textContent = state.score;
+  document.getElementById("best-score-go").textContent = Math.max(best, state.score);
+  document.getElementById("new-record").style.display = isRecord ? "block" : "none";
+  const elapsed = Math.floor((performance.now() - state.gameStartTime)/1000);
+  document.getElementById("go-time").textContent =
+    String(Math.floor(elapsed/60)).padStart(2,'0') + ":" + String(elapsed%60).padStart(2,'0');
+  document.getElementById("go-removed").textContent = state.totalHarvested;
+  document.getElementById("go-trophies").textContent = state.trophies;
+  document.getElementById("game-over").style.display = "flex";
+}
+
+// PAUSE – verschiebt alle Zeitstempel, damit nichts während der Pause "altert"
+function shiftTimers(delta) {
+  state.gameStartTime += delta; state.lastSpawn += delta; state.poisonChargeStart += delta;
+  if(state.motorBrushEnd) state.motorBrushEnd += delta;
+  kratzerCooldown += delta; lastMotorSound += delta;
+  for(const v of state.activeVinegars) v.lastStepTime += delta;
+  for(let r=0;r<CONFIG.GRID_ROWS;r++) for(let c=0;c<CONFIG.GRID_COLS;c++) {
+    const cell = state.grid[r][c];
+    if(cell.growTimer) cell.growTimer += delta;
+    if(cell.poisonEnd) cell.poisonEnd += delta;
+    if(cell.vinegarEnd) cell.vinegarEnd += delta;
+    if(cell.lastSwept) cell.lastSwept += delta;
+  }
+}
+function pauseGame() {
+  if(!state.gameStarted || state.gameOver || state.paused) return;
+  state.paused = true; pauseStart = performance.now();
+  if(animId) cancelAnimationFrame(animId);
+  document.getElementById("pause-screen").style.display = "flex";
+}
+function resumeGame() {
+  if(!state.paused) return;
+  state.paused = false;
+  shiftTimers(performance.now() - pauseStart);
+  document.getElementById("pause-screen").style.display = "none";
+  requestAnimationFrame(gameLoop);
+}
+function togglePause() { if(state.paused) resumeGame(); else pauseGame(); }
 
 // Interaktion
 function executeToolAction(r, c) {
@@ -836,7 +902,7 @@ function processSweep(r, c) {
 }
 
 function handleInput(e, type) {
-  if(state.gameOver||!state.gameStarted) return;
+  if(state.gameOver||!state.gameStarted||state.paused) return;
   const rect=canvas.getBoundingClientRect();
   const x=(e.touches?e.touches[0].clientX:e.clientX)-rect.left;
   const y=(e.touches?e.touches[0].clientY:e.clientY)-rect.top;
@@ -879,8 +945,11 @@ canvas.addEventListener("touchmove",e=>{e.preventDefault();handleInput(e,'move')
 window.addEventListener("touchend",()=>isDragging=false);
 
 window.addEventListener("keydown",e=>{
-  if(state.gameOver)return;
-  switch(e.key.toLowerCase()){
+  if(state.gameOver||!state.gameStarted)return;
+  const k=e.key.toLowerCase();
+  if(k==="p"||k==="escape"){ togglePause(); return; }
+  if(state.paused) return;
+  switch(k){
     case"1":state.activeTool=0;poisonMode=false;essigMode=false;updateHUD();break;
     case"2":state.activeTool=1;poisonMode=false;essigMode=false;updateHUD();break;
     case"3":state.activeTool=2;poisonMode=false;essigMode=false;updateHUD();break;
@@ -891,8 +960,12 @@ window.addEventListener("keydown",e=>{
   }
 });
 
+// Tab-Wechsel pausiert automatisch (verhindert unfaire Zeit-/Wachstumssprünge)
+document.addEventListener("visibilitychange",()=>{ if(document.hidden) pauseGame(); });
+
 const start=()=>{
   document.getElementById("start-screen").style.display="none"; document.getElementById("game-over").style.display="none";
+  document.getElementById("pause-screen").style.display="none";
   initAudio();initState();resize();buildToolbar();
   poisonMode=false; essigMode=false; isDragging=false; canvas.style.cursor="pointer";
   state.poisonShots=1;state.poisonChargeStart=performance.now();state.poisonCharging=true;
@@ -903,7 +976,14 @@ const start=()=>{
 
 document.getElementById("start-btn").addEventListener("click",start);
 document.getElementById("restart-btn").addEventListener("click",start);
+document.getElementById("resume-btn").addEventListener("click",resumeGame);
 document.getElementById("mute-btn").addEventListener("click",()=>{isMuted=!isMuted;document.getElementById("mute-btn").textContent=isMuted?"🔇":"🔊";});
+
+// Bestwert auf dem Startbildschirm anzeigen
+(function showBestOnStart(){
+  const best=getHighscore();
+  if(best>0){ document.getElementById("best-score-start").style.display="block"; document.getElementById("best-score-val").textContent=best; }
+})();
 </script>
 </body>
 </html>
