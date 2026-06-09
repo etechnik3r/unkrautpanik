@@ -68,6 +68,7 @@ Für **GitHub Pages**: Repository-Settings → Pages → Branch `main` → Ordne
 | **Q** | 🔥 Abflammer aktivieren |
 | **W** | ❄️ Spray aktivieren |
 | **E** | ⚡ Vibro-Stampfer aktivieren |
+| **P / Esc** | Pause / Fortsetzen |
 
 ### Mobil
 
@@ -122,7 +123,8 @@ merles_unkrautpanik.html   ← Alles in einer Datei
 ## 🗺️ Roadmap (Ideen)
 
 - [ ] Progression-Curve: Neue Unkraut-Typen nach Score/Zeit freischalten
-- [ ] Highscore-Persistenz via `localStorage`
+- [x] Highscore-Persistenz via `localStorage`
+- [x] Pause-Funktion (`P` / `Esc`, Auto-Pause bei Tab-Wechsel)
 - [ ] Mehrere Hof-Layouts / Level
 - [ ] Saisonale Skins (Herbstlaub, Schnee)
 - [ ] Sound-Optionen (Lautstärkeregler)
