@@ -172,6 +172,8 @@ h1 { font-size:42px; margin-bottom:10px; text-align:center; }
   <div class="stat-row" style="color:#bb77dd;"><span>Distel:</span><span class="stat-val" id="stat-distel">0</span></div>
   <div class="stat-row" style="color:#4d9a3e;"><span>Efeu (Ranke):</span><span class="stat-val" id="stat-efeu">0</span></div>
   <div class="stat-row" style="color:#557744;"><span>Moos:</span><span class="stat-val" id="stat-moos">0</span></div>
+  <div class="stat-row" style="color:#ffe033;"><span>Hahnenfuß:</span><span class="stat-val" id="stat-hahnenfuss">0</span></div>
+  <div class="stat-row" style="color:#e8e8e8;"><span>Schafgarbe:</span><span class="stat-val" id="stat-schafgarbe">0</span></div>
 </div>
 
 <div id="achievements-panel"></div>
@@ -237,7 +239,7 @@ const CONFIG = {
   MOBILE_TARGET_TILE: 50, // angepeilte Feldgröße (px) auf dem Handy
   HIGHSCORE_KEY: "unkrautpanik_highscore",
   POISON_CHARGE_TIME: 15000, POISON_MAX_SHOTS: 3, POISON_RADIUS: 1, POISON_DURATION: 12000,
-  WEED_POOL: ["grass","grass","grass","grass","dandelion","dandelion","vogelmiere","vogelmiere","giersch","wegerich","brennnessel","distel","efeu","moos"],
+  WEED_POOL: ["grass","grass","grass","grass","dandelion","dandelion","vogelmiere","vogelmiere","giersch","wegerich","brennnessel","distel","efeu","moos","hahnenfuss","hahnenfuss","schafgarbe","schafgarbe"],
   STONE_SKINS: [
     { name:"Betongrau", base:"#8a8a8a", dark:"#6a6a6a", light:"#a0a0a0", joint:"#444" }
   ],
@@ -307,7 +309,7 @@ function initState() {
     poisonShots: 0, poisonChargeStart: 0, poisonCharging: true,
     activeVinegars: [],
     motorBrushActive: false, motorBrushEnd: 0,
-    stats: { plucks:0, scrapes:0, grass:0, dandelion:0, giersch:0, vogelmiere:0, wegerich:0, brennnessel:0, distel:0, efeu:0, moos:0 },
+    stats: { plucks:0, scrapes:0, grass:0, dandelion:0, giersch:0, vogelmiere:0, wegerich:0, brennnessel:0, distel:0, efeu:0, moos:0, hahnenfuss:0, schafgarbe:0 },
     achievements: {}
   };
   ACHIEVEMENTS_DEF.forEach(a => state.achievements[a.id] = { completed: false, inUi: false });
@@ -350,12 +352,24 @@ function playNoise(filterFreq, filterType, gainVal, decay) {
 function playHarvestSound(toolIndex) {
   if (!audioCtx || isMuted) return;
   try {
-    if (toolIndex === 0) { // Hand
+    if (toolIndex === 0) { // Hand – weiches Zupfen
       playNoise(300, "bandpass", 1.2, 0.08); playTone(180, "sine", 0.1, 0.3, 0.1);
-    } else if (toolIndex === 1) { // Kratzer
-      playNoise(1500, "bandpass", 2.0, 0.25); playNoise(300, "lowpass", 1.0, 0.2);
-    } else { // Besen
-      playNoise(3000, "highpass", 0.8, 0.15); playNoise(800, "bandpass", 1.5, 0.15);
+    } else if (toolIndex === 1) { // Kratzer – langes metallisches Schaben
+      const dur=0.65, sr=audioCtx.sampleRate;
+      const buf=audioCtx.createBuffer(1,Math.ceil(sr*dur),sr); const d=buf.getChannelData(0);
+      for(let i=0;i<d.length;i++){
+        const t=i/sr, mod=0.5+0.5*Math.sin(t*310+Math.sin(t*130)*5);
+        d[i]=(Math.random()*2-1)*mod;
+      }
+      const src=audioCtx.createBufferSource(); src.buffer=buf;
+      const bp=audioCtx.createBiquadFilter(); bp.type="bandpass"; bp.frequency.value=1900; bp.Q.value=2.8;
+      const g=audioCtx.createGain();
+      g.gain.setValueAtTime(2.5,audioCtx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+dur);
+      src.connect(bp).connect(g).connect(audioCtx.destination); src.start();
+      playTone(210,"sawtooth",0.55,0.22,0.5); // metallischer Oberton
+    } else { // Besen – sanftes Wischen
+      playNoise(3500, "highpass", 0.6, 0.35); playNoise(900, "bandpass", 1.0, 0.3);
     }
   } catch(e){}
 }
@@ -365,21 +379,69 @@ function playMotorSound() {
   playNoise(800, "lowpass", 1.5, 0.1); playTone(120, "sawtooth", 0.1, 0.5, 0.1);
 }
 
-// Druckspritze: kurzer Trigger-"Klick" + zischender Sprühnebel (Höhen, leicht abklingend)
+// Giftspritze: Pumpenklick + langer zischender Sprühstoß mit Druckabfall
 function playSpraySound() {
   if (!audioCtx || isMuted) return;
   try {
-    playTone(95, "square", 0.04, 0.18, 0.04); // Abzug
-    const dur=0.5;
-    const buf=audioCtx.createBuffer(1, audioCtx.sampleRate*dur, audioCtx.sampleRate);
+    // Mechanischer Pumpklick
+    playTone(80, "square", 0.04, 0.22, 0.04);
+    // Langer Sprühnebel (2s) mit Druckabfall-Envelope
+    const dur=2.0, sr=audioCtx.sampleRate;
+    const buf=audioCtx.createBuffer(1, Math.ceil(sr*dur), sr);
     const d=buf.getChannelData(0);
-    for(let i=0;i<d.length;i++){ const env=1-i/d.length; d[i]=(Math.random()*2-1)*env*env; }
+    for(let i=0;i<d.length;i++){
+      const t=i/sr;
+      const pressure=Math.pow(Math.max(0,1-t*0.55),0.7); // langsamer Druckabfall
+      d[i]=(Math.random()*2-1)*pressure;
+    }
     const src=audioCtx.createBufferSource(); src.buffer=buf;
-    const hp=audioCtx.createBiquadFilter(); hp.type="highpass"; hp.frequency.value=3500;
-    const bp=audioCtx.createBiquadFilter(); bp.type="bandpass"; bp.frequency.value=6500; bp.Q.value=0.6;
-    const g=audioCtx.createGain(); g.gain.setValueAtTime(0.9, audioCtx.currentTime);
+    const hp=audioCtx.createBiquadFilter(); hp.type="highpass"; hp.frequency.value=4500;
+    const bp=audioCtx.createBiquadFilter(); bp.type="bandpass"; bp.frequency.value=7000; bp.Q.value=0.5;
+    const g=audioCtx.createGain();
+    g.gain.setValueAtTime(0.001, audioCtx.currentTime);
+    g.gain.linearRampToValueAtTime(1.1, audioCtx.currentTime+0.06); // Druckstoß
     g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime+dur);
     src.connect(hp).connect(bp).connect(g).connect(audioCtx.destination); src.start();
+    // Tieferer Strahl-Anteil
+    playNoise(1800, "bandpass", 0.5, 0.8);
+  } catch(e){}
+}
+
+// Abflammer: Feuergeknister wie ein Gasbrenner
+function playFlameSound() {
+  if (!audioCtx || isMuted) return;
+  try {
+    const dur=1.8, sr=audioCtx.sampleRate;
+    const buf=audioCtx.createBuffer(1, Math.ceil(sr*dur), sr);
+    const d=buf.getChannelData(0);
+    for(let i=0;i<d.length;i++){
+      const crackle=Math.random()<0.004?(Math.random()*2-1)*6:0; // Knackser
+      d[i]=(Math.random()*2-1)*0.35+crackle;
+    }
+    const src=audioCtx.createBufferSource(); src.buffer=buf;
+    const bp=audioCtx.createBiquadFilter(); bp.type="bandpass"; bp.frequency.value=950; bp.Q.value=0.7;
+    const g=audioCtx.createGain();
+    g.gain.setValueAtTime(2.8, audioCtx.currentTime); // Whomp beim Zünden
+    g.gain.setTargetAtTime(1.0, audioCtx.currentTime+0.08, 0.25); // in Dauerbrenngeräusch
+    g.gain.setTargetAtTime(0.001, audioCtx.currentTime+1.0, 0.35); // ausblenden
+    src.connect(bp).connect(g).connect(audioCtx.destination); src.start();
+    playNoise(220, "lowpass", 0.7, 1.4); // tiefes Gasrauschen
+    playNoise(4500, "highpass", 0.2, 0.9); // Knisterhöhen
+  } catch(e){}
+}
+
+// Distel mit der Hand – kurzer Schmerzlaut
+function playOuchSound() {
+  if (!audioCtx || isMuted) return;
+  try {
+    const osc=audioCtx.createOscillator(); const g=audioCtx.createGain();
+    osc.type="sine";
+    osc.frequency.setValueAtTime(560, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(170, audioCtx.currentTime+0.2);
+    g.gain.setValueAtTime(0.38, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime+0.25);
+    osc.connect(g).connect(audioCtx.destination); osc.start(); osc.stop(audioCtx.currentTime+0.25);
+    playNoise(900,"bandpass",0.12,0.14); // hauchige Beimischung
   } catch(e){}
 }
 
@@ -553,6 +615,8 @@ function drawWeed(r,c) {
       case "distel": drawDistel(g,globalWindForce,cell.stage); break;
       case "efeu": drawEfeu(g,cell.stage); break;
       case "moos": drawMoos(g,cell.clicks); break;
+      case "hahnenfuss": drawHahnenfuss(g,globalWindForce,cell.stage); break;
+      case "schafgarbe": drawSchafgarbe(g,globalWindForce,cell.stage); break;
     }
   }
   ctx.restore();
@@ -587,13 +651,15 @@ function lobedLeaf(len,wid,col){
 function drawGrass(g,wind,stage){
   const baseH=g*tileH*1.7+3, sway=wind*g*9;
   const blades=Math.min(9,4+Math.floor(stage/2));
+  const lean=sr()*0.35-0.175; // per-cell lean direction
+  const thick=0.8+sr()*0.45; // per-cell blade thickness
   ctx.lineCap="round";
   for(let i=0;i<blades;i++){
     const f=(i/(blades-1))-0.5;
     const offX=f*tileW*0.55;
-    const hh=baseH*(0.6+0.5*Math.cos(f*Math.PI))*(0.85+sr()*0.3);
-    const s=sway*(0.5+Math.abs(f)*1.3);
-    ctx.strokeStyle=GREENS[i%GREENS.length]; ctx.lineWidth=1.1+g*1.7;
+    const hh=baseH*(0.6+0.5*Math.cos(f*Math.PI))*(0.75+sr()*0.5);
+    const s=sway*(0.5+Math.abs(f)*1.3)+lean*hh*0.4;
+    ctx.strokeStyle=GREENS[Math.floor(sr()*GREENS.length)]; ctx.lineWidth=(1.1+g*1.7)*thick;
     ctx.beginPath(); ctx.moveTo(offX,0); ctx.quadraticCurveTo(offX+s*0.5,-hh*0.55,offX+s,-hh); ctx.stroke();
   }
   ctx.lineCap="butt";
@@ -601,9 +667,12 @@ function drawGrass(g,wind,stage){
 
 function drawDandelion(g,wind,stage){
   const sway=wind*g*6;
-  // Basalrosette aus gelappten Blättern
-  for(let i=0;i<6;i++){ ctx.save(); ctx.rotate((i/6)*Math.PI*2+0.5); lobedLeaf(g*tileH*0.9*(0.8+sr()*0.4),g*tileW*0.15,"#3a6b1a"); ctx.restore(); }
-  const h=g*tileH*1.5+4;
+  const rot0=sr()*Math.PI*2; // per-cell starting rotation
+  const lc=5+Math.floor(sr()*3); // 5-7 rosette leaves
+  const lsz=0.8+sr()*0.4; // size variation
+  const leafCol=["#3a6b1a","#2e5a14","#4a7a20","#356018"][Math.floor(sr()*4)];
+  for(let i=0;i<lc;i++){ ctx.save(); ctx.rotate((i/lc)*Math.PI*2+rot0); lobedLeaf(g*tileH*0.9*lsz*(0.75+sr()*0.5),g*tileW*0.15*lsz,leafCol); ctx.restore(); }
+  const h=g*tileH*(1.3+sr()*0.4)+4;
   ctx.strokeStyle="#5a9030"; ctx.lineWidth=1.4+g*1.6;
   ctx.beginPath(); ctx.moveTo(0,0); ctx.quadraticCurveTo(sway*0.5,-h*0.55,sway,-h); ctx.stroke();
   ctx.save(); ctx.translate(sway,-h);
@@ -622,8 +691,11 @@ function drawDandelion(g,wind,stage){
 
 function drawGiersch(g,wind,stage){
   const sway=wind*g*7;
-  for(let i=0;i<5;i++){ ctx.save(); ctx.rotate((i/5)*Math.PI*2+0.4); leaf(g*tileH*0.85,g*tileH*0.32,GREENS[(i+2)%GREENS.length]); ctx.restore(); }
-  const h=g*tileH*1.5+3;
+  const rot0=sr()*0.9; // per-cell rotation offset
+  const lc=4+Math.floor(sr()*3); // 4-6 leaves
+  const lsz=0.8+sr()*0.4;
+  for(let i=0;i<lc;i++){ ctx.save(); ctx.rotate((i/lc)*Math.PI*2+rot0); leaf(g*tileH*0.85*lsz,g*tileH*0.32*lsz,GREENS[Math.floor(sr()*GREENS.length)]); ctx.restore(); }
+  const h=g*tileH*(1.3+sr()*0.4)+3;
   ctx.strokeStyle="#6aab48"; ctx.lineWidth=1.2+g*1.4;
   ctx.beginPath(); ctx.moveTo(0,0); ctx.quadraticCurveTo(sway*0.5,-h*0.55,sway,-h); ctx.stroke();
   if(stage>5){ ctx.fillStyle="#fff"; ctx.save(); ctx.translate(sway,-h);
@@ -633,10 +705,13 @@ function drawGiersch(g,wind,stage){
 }
 
 function drawVogelmiere(g,stage){
-  for(let i=0;i<8;i++){ const a=i/8*Math.PI*2, rr=g*tileW*0.3*(0.55+sr()*0.6);
+  const lc=6+Math.floor(sr()*4); // 6-9 leaves
+  const rot0=sr()*Math.PI*2;
+  const lsz=0.8+sr()*0.4;
+  for(let i=0;i<lc;i++){ const a=i/lc*Math.PI*2+rot0, rr=g*tileW*0.3*(0.5+sr()*0.65);
     const lx=Math.cos(a)*rr, ly=Math.sin(a)*rr*0.75;
-    ctx.fillStyle=GREENS[i%GREENS.length];
-    ctx.beginPath(); ctx.ellipse(lx,ly,g*tileW*0.13,g*tileH*0.1,a,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=GREENS[Math.floor(sr()*GREENS.length)];
+    ctx.beginPath(); ctx.ellipse(lx,ly,g*tileW*0.13*lsz,g*tileH*0.1*lsz,a,0,Math.PI*2); ctx.fill();
   }
   if(stage>5){
     for(let k=0;k<3;k++){ const a=sr()*6.28, rr=g*tileW*0.18, sx=Math.cos(a)*rr, sy=Math.sin(a)*rr*0.75;
@@ -647,9 +722,12 @@ function drawVogelmiere(g,stage){
 }
 
 function drawWegerich(g,wind,stage){
-  for(let i=0;i<5;i++){ ctx.save(); ctx.rotate((i/5)*Math.PI*2+0.2);
-    const ll=g*tileH*1.0; leaf(ll,ll*0.4,GREENS[(i+1)%GREENS.length]); ctx.restore(); }
-  if(stage>4){ const h=g*tileH*1.9, sway=wind*g*4;
+  const rot0=sr()*0.8;
+  const lc=4+Math.floor(sr()*3); // 4-6 leaves
+  const lsz=0.8+sr()*0.4;
+  for(let i=0;i<lc;i++){ ctx.save(); ctx.rotate((i/lc)*Math.PI*2+rot0);
+    const ll=g*tileH*1.0*lsz; leaf(ll,ll*0.4,GREENS[Math.floor(sr()*GREENS.length)]); ctx.restore(); }
+  if(stage>4){ const h=g*tileH*(1.7+sr()*0.4), sway=wind*g*4;
     ctx.strokeStyle="#7a6a3a"; ctx.lineWidth=1.3+g;
     ctx.beginPath(); ctx.moveTo(0,0); ctx.quadraticCurveTo(sway*0.5,-h*0.6,sway,-h); ctx.stroke();
     ctx.fillStyle="#9a8a55"; ctx.beginPath(); ctx.ellipse(sway,-h+g*4,g*1.8,g*7,0,0,Math.PI*2); ctx.fill();
@@ -657,13 +735,17 @@ function drawWegerich(g,wind,stage){
 }
 
 function drawBrennnessel(g,wind,stage){
-  const h=g*tileH*1.9+5, sway=wind*g*7;
+  const lean=sr()*0.3-0.15; // per-cell lean
+  const lsz=0.8+sr()*0.4;
+  const leafCol=["#367a24","#2e6b1e","#4a8a2e","#3a7a28"][Math.floor(sr()*4)];
+  const h=g*tileH*(1.7+sr()*0.4)+5, sway=wind*g*7+lean*h*0.15;
   ctx.strokeStyle="#2e6b1e"; ctx.lineWidth=1.8+g*1.8;
   ctx.beginPath(); ctx.moveTo(0,0); ctx.quadraticCurveTo(sway*0.5,-h*0.5,sway,-h); ctx.stroke();
   const pairs=Math.min(5,2+Math.floor(stage/3));
   for(let i=1;i<=pairs;i++){
-    const f=i/(pairs+0.5), wy=-h*f, wx=sway*f, ls=g*tileH*0.55*(1-f*0.35);
-    for(const dir of [1,-1]){ ctx.save(); ctx.translate(wx,wy); ctx.rotate(dir*1.05); leaf(ls,ls*0.3,"#367a24"); ctx.restore(); }
+    const f=i/(pairs+0.5), wy=-h*f, wx=sway*f, ls=g*tileH*0.55*lsz*(1-f*0.35);
+    const leafAng=1.05+sr()*0.25;
+    for(const dir of [1,-1]){ ctx.save(); ctx.translate(wx,wy); ctx.rotate(dir*leafAng); leaf(ls,ls*0.3,leafCol); ctx.restore(); }
   }
   if(stage>9){ ctx.strokeStyle="#cfcf9a"; ctx.lineWidth=0.8;
     for(let i=2;i<=pairs;i++){ const f=i/(pairs+0.5); ctx.beginPath(); ctx.moveTo(sway*f,-h*f); ctx.lineTo(sway*f+g*3,-h*f+g*5); ctx.stroke(); } }
@@ -671,8 +753,12 @@ function drawBrennnessel(g,wind,stage){
 
 function drawDistel(g,wind,stage){
   const sway=wind*g*5;
-  for(let i=0;i<5;i++){ ctx.save(); ctx.rotate((i/5)*Math.PI*2+0.4); lobedLeaf(g*tileH*0.95,g*tileW*0.17,"#557a46"); ctx.restore(); }
-  const h=g*tileH*1.7+5;
+  const rot0=sr()*0.8;
+  const lc=4+Math.floor(sr()*3); // 4-6 lobed leaves
+  const lsz=0.8+sr()*0.4;
+  const leafCol=["#557a46","#3d6633","#6a9055","#4a7040"][Math.floor(sr()*4)];
+  for(let i=0;i<lc;i++){ ctx.save(); ctx.rotate((i/lc)*Math.PI*2+rot0); lobedLeaf(g*tileH*0.95*lsz,g*tileW*0.17*lsz,leafCol); ctx.restore(); }
+  const h=g*tileH*(1.5+sr()*0.4)+5;
   ctx.strokeStyle="#4a6c3e"; ctx.lineWidth=1.8+g*1.8;
   ctx.beginPath(); ctx.moveTo(0,0); ctx.quadraticCurveTo(sway*0.5,-h*0.5,sway,-h); ctx.stroke();
   if(stage>5){ ctx.save(); ctx.translate(sway,-h);
@@ -705,6 +791,82 @@ function drawMoos(g,clicksRemaining){
   for(let i=0;i<16;i++){ const a=sr()*6.28, rr=sr()*R*0.9, x=Math.cos(a)*rr, y=Math.sin(a)*rr*0.85;
     ctx.fillStyle=`rgba(${90+(sr()*45|0)},${130+(sr()*55|0)},${50+(sr()*30|0)},${op})`;
     ctx.beginPath(); ctx.arc(x,y,R*0.13,0,Math.PI*2); ctx.fill(); }
+}
+
+function drawHahnenfuss(g,wind,stage){
+  const sway=wind*g*6;
+  const rot0=sr()*Math.PI*2;
+  const lc=5+Math.floor(sr()*3); // 5-7 rosette leaves
+  const lsz=0.8+sr()*0.4;
+  const leafCols=["#3a7a18","#2e6014","#4a8a20","#345e16"];
+  for(let i=0;i<lc;i++){
+    ctx.save(); ctx.rotate((i/lc)*Math.PI*2+rot0);
+    const col=leafCols[Math.floor(sr()*leafCols.length)];
+    const ll=g*tileH*0.8*lsz*(0.75+sr()*0.5);
+    ctx.beginPath(); ctx.moveTo(0,0);
+    ctx.bezierCurveTo(ll*0.45,-ll*0.3,ll*0.5,-ll*0.75,0,-ll);
+    ctx.bezierCurveTo(-ll*0.5,-ll*0.75,-ll*0.45,-ll*0.3,0,0);
+    ctx.fillStyle=col; ctx.fill();
+    ctx.strokeStyle="rgba(0,40,0,0.2)"; ctx.lineWidth=0.5;
+    ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(0,-ll*0.85); ctx.stroke();
+    ctx.restore();
+  }
+  if(stage>5){
+    const h=g*tileH*(1.2+sr()*0.5)+4;
+    ctx.strokeStyle="#5a8a2a"; ctx.lineWidth=1.2+g*1.5;
+    ctx.beginPath(); ctx.moveTo(0,0); ctx.quadraticCurveTo(sway*0.5,-h*0.55,sway,-h); ctx.stroke();
+    ctx.save(); ctx.translate(sway,-h);
+    if(stage<10){
+      ctx.fillStyle="#3a7a18"; ctx.beginPath(); ctx.ellipse(0,0,g*2.5,g*3.5,0,0,Math.PI*2); ctx.fill();
+    } else {
+      const pRot=sr()*0.6;
+      for(let p=0;p<5;p++){
+        ctx.save(); ctx.rotate(p/5*Math.PI*2+pRot);
+        ctx.fillStyle="#ffe033";
+        ctx.beginPath(); ctx.ellipse(0,-g*5,g*2.8,g*4.2,0,0,Math.PI*2); ctx.fill();
+        ctx.restore();
+      }
+      ctx.fillStyle="#d4a800"; ctx.beginPath(); ctx.arc(0,0,g*2.5,0,Math.PI*2); ctx.fill();
+      // glossy sheen
+      ctx.fillStyle="rgba(255,255,180,0.35)"; ctx.beginPath(); ctx.arc(-g*0.7,-g*0.7,g*1.2,0,Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
+function drawSchafgarbe(g,wind,stage){
+  const sway=wind*g*5;
+  const rot0=sr()*0.5;
+  const lsz=0.8+sr()*0.35;
+  const feathers=Math.min(8,3+Math.floor(stage/2));
+  const leafCol=["#3a6b20","#2e5a18","#4a7a28","#527a30"][Math.floor(sr()*4)];
+  for(let i=0;i<feathers;i++){
+    const side=i%2===0?1:-1;
+    const fy=-i*g*tileH*0.11;
+    const fx=sway*0.1*i/feathers;
+    ctx.save(); ctx.translate(fx,fy); ctx.rotate(side*(1.0+sr()*0.35)+rot0*0.15);
+    leaf(g*tileH*0.48*lsz,g*tileH*0.11*lsz,leafCol);
+    // kleine Fiederblätten
+    ctx.save(); ctx.translate(0,-g*tileH*0.22*lsz); ctx.rotate(-side*0.55);
+    leaf(g*tileH*0.22*lsz,g*tileH*0.07*lsz,leafCol); ctx.restore();
+    ctx.restore();
+  }
+  if(stage>6){
+    const h=g*tileH*(1.6+sr()*0.4)+5;
+    ctx.strokeStyle="#7a9a50"; ctx.lineWidth=1.3+g*1.4;
+    ctx.beginPath(); ctx.moveTo(0,0); ctx.quadraticCurveTo(sway*0.5,-h*0.55,sway,-h); ctx.stroke();
+    ctx.save(); ctx.translate(sway,-h);
+    const clusters=5+Math.floor(sr()*4);
+    for(let k=0;k<clusters;k++){
+      const a=k/clusters*Math.PI*2;
+      const rr=g*(3+sr()*3);
+      const fx=Math.cos(a)*rr, fy=Math.sin(a)*rr*0.5;
+      ctx.fillStyle="#ffffff";
+      for(let p=0;p<5;p++){ const pa=p/5*Math.PI*2; ctx.beginPath(); ctx.arc(fx+Math.cos(pa)*g*1.1,fy+Math.sin(pa)*g*1.1,g*0.75,0,Math.PI*2); ctx.fill(); }
+      ctx.fillStyle="#f0d060"; ctx.beginPath(); ctx.arc(fx,fy,g*0.75,0,Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+  }
 }
 
 // ========================================================================
@@ -767,13 +929,17 @@ function growWeeds(now) {
         continue;
       }
       if(cell.poisoned&&now<cell.poisonEnd) {
-        if(cell.stage>0 && now-cell.growTimer>1000) {
+        if(cell.stage>0 && now-cell.growTimer>500) {
           cell.stage--; cell.growTimer=now;
           if(cell.stage===0){cell.type="none";cell.hasRoot=false;cell.originR=null;cell.originC=null;}
         }
         continue;
       }
-      if(cell.poisoned&&now>=cell.poisonEnd) cell.poisoned=false;
+      if(cell.poisoned&&now>=cell.poisonEnd) {
+        cell.poisoned=false;
+        // Pflanze, die das Gift überlebt hat, stirbt trotzdem komplett ab
+        if(cell.stage>0){cell.stage=0;cell.type="none";cell.hasRoot=false;cell.originR=null;cell.originC=null;}
+      }
       if(cell.vinegarEnd&&now>=cell.vinegarEnd) cell.vinegarEnd=0;
       
       if(cell.stage>0&&cell.stage<CONFIG.MAX_STAGE) {
@@ -805,6 +971,7 @@ function processHarvest(r, c, toolId) {
     if(cell.hasRoot && (toolId===1 || toolId===2)) {
       cell.hasRoot=false; cell.type="none"; cell.originR=null; cell.originC=null;
       state.score+=2; state.stats.scrapes++;
+      updateStatsUI();
       return true;
     }
     return false;
@@ -812,7 +979,7 @@ function processHarvest(r, c, toolId) {
 
   // Disteln sind zu stachelig für Hand & Stahlbesen – nur der Kratzer entfernt sie
   if(cell.type==="distel" && toolId!==1) {
-    playTone(150,"square",0.06,0.12,0.06);
+    playOuchSound();
     clinkBurst(r,c);
     return false;
   }
@@ -831,6 +998,7 @@ function processHarvest(r, c, toolId) {
   }else{
     cell.stage=0; cell.type="none"; cell.hasRoot=false; cell.rootMult=1; cell.originR=null; cell.originC=null;
   }
+  updateStatsUI();
   return true;
 }
 
@@ -850,7 +1018,7 @@ function activateAbflammer() {
       }
     }
   }
-  if(burned){ playNoise(800,"lowpass",2.5,1.2); state.fireOverlay=0.4; }
+  if(burned){ playFlameSound(); state.fireOverlay=0.4; }
   updateHUD();
 }
 
@@ -939,6 +1107,7 @@ function selectTool(n) {
 }
 
 function updateStatsUI() {
+  if(!state.stats) return;
   for(let key in state.stats){const el=document.getElementById(`stat-${key}`);if(el)el.textContent=state.stats[key];}
 }
 
@@ -1054,6 +1223,7 @@ function gameLoop(timestamp) {
   const now=performance.now();
   state.growthRate+=CONFIG.GROWTH_RATE_INCREASE;
   spawnWeed(now); growWeeds(now); updatePoisonCharge(now); processVinegar(now); checkAchievements(now);
+  updateStatsUI(); // früh aufrufen – bleibt korrekt auch bei Draw-Fehlern
   
   if(state.motorBrushActive && now >= state.motorBrushEnd) state.motorBrushActive = false;
 
@@ -1080,6 +1250,19 @@ function gameLoop(timestamp) {
         traceTile(s.x,s.y);
         ctx.fillStyle=poisonMode?"rgba(0,255,136,0.2)":"rgba(200,200,80,0.2)";ctx.fill();
         ctx.strokeStyle=poisonMode?"#00ff88":"#cccc44";ctx.lineWidth=1.5;ctx.stroke();
+      }
+    });
+  }
+
+  // Kratzer: 2×2-Block-Vorschau wenn Kratzer-Werkzeug aktiv
+  if(state.activeTool===1 && !motorMode && state.hoveredCell) {
+    const {r,c}=state.hoveredCell;
+    [{r,c},{r:r+1,c},{r,c:c+1},{r:r+1,c:c+1}].forEach(t=>{
+      if(t.r>=0&&t.r<CONFIG.GRID_ROWS&&t.c>=0&&t.c<CONFIG.GRID_COLS){
+        const s=gridToScreen(t.r,t.c);
+        traceTile(s.x,s.y);
+        ctx.fillStyle="rgba(247,183,51,0.18)";ctx.fill();
+        ctx.strokeStyle="#f7b733";ctx.lineWidth=1.5;ctx.stroke();
       }
     });
   }
@@ -1125,6 +1308,7 @@ function gameLoop(timestamp) {
   if(state.fireOverlay>0) { ctx.fillStyle=`rgba(255,80,0,${state.fireOverlay})`; ctx.fillRect(0,0,canvas.width,canvas.height); state.fireOverlay-=0.01; }
   updateParticles();
   updateHUD();
+  updateStatsUI();
 }
 
 // HIGHSCORE (localStorage)
