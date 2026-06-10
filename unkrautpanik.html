@@ -176,10 +176,11 @@ h1 { font-size:42px; margin-bottom:10px; text-align:center; }
   <h1 style="color:#56ab2f;">🌿 Merles Unkrautpanik</h1>
   <div style="font-size:13px; color:#999; margin-bottom:20px; text-align:center; line-height:1.8;">
     <b>Werkzeuge:</b><br>
-    <b>[1]</b> Hand (Klick) &nbsp; <b>[2]</b> Kratzer (entfernt 4 Felder, 1s Pause) &nbsp; <b>[3]</b> Stahlbesen (Ziehen/Wischen)<br><br>
+    <b>[1]</b> Hand (Klick) &nbsp; <b>[2]</b> Kratzer (entfernt 4 Felder, 1s Pause) &nbsp; <b>[3]</b> Stahlbesen (Ziehen/Wischen)<br>
+    <span style="color:#bb77dd;">🌵 Disteln sind zu stachelig – nur der Kratzer entfernt sie!</span><br><br>
     <b>Superwaffen (benötigen Energie/Zeit):</b><br>
     <b>[Q]</b> Abfackeln &nbsp; <b>[W]</b> Essigwasser (breitet sich fließend aus)<br>
-    <b>[E]</b> Motorbürste (rodet 0,5s lang am Mauszeiger alles weg)<br>
+    <b>[E]</b> Motorbürste (scharfschalten, dann aufs Feld klicken – rodet 0,5s am Mauszeiger)<br>
     <b>[R]</b> Giftspritze (Pflanzen verrotten)<br><br>
     <b>[P]</b> / <b>[Esc]</b> Pause
   </div>
@@ -221,7 +222,7 @@ let audioCtx = null;
 let isMuted = false; let isMobile = false;
 let canvas, ctx, fireCanvas, fireCtx, animId = null;
 let fireParticles = [];
-let poisonMode = false; let essigMode = false;
+let poisonMode = false; let essigMode = false; let motorMode = false;
 let isDragging = false;
 let kratzerCooldown = 0; // ms
 let lastMotorSound = 0; // ms – drosselt den Motorbürsten-Sound
@@ -308,6 +309,61 @@ function playMotorSound() {
   if (!audioCtx || isMuted) return;
   playNoise(800, "lowpass", 1.5, 0.1); playTone(120, "sawtooth", 0.1, 0.5, 0.1);
 }
+
+// ========================================================================
+// PARTIKEL-SYSTEM (auf fireCanvas-Overlay)
+// ========================================================================
+const MAX_PARTICLES = 600;
+function addParticle(x,y,vx,vy,life,size,color,grav) {
+  if(fireParticles.length >= MAX_PARTICLES) return;
+  fireParticles.push({ x, y, vx, vy, life, max:life, size, color, grav:grav||0 });
+}
+function burst(sx, sy, o) {
+  const n = o.count || 10;
+  for(let i=0;i<n;i++) {
+    const a = Math.random()*Math.PI*2;
+    const sp = (o.speedMin||0.5) + Math.random()*((o.speedMax||2)-(o.speedMin||0.5));
+    addParticle(
+      sx + (Math.random()-0.5)*(o.spread||6),
+      sy + (Math.random()-0.5)*(o.spread||6),
+      Math.cos(a)*sp,
+      Math.sin(a)*sp + (o.vyBias||0),
+      (o.life||30) + Math.random()*15,
+      (o.size||3) * (0.6 + Math.random()*0.8),
+      o.colors[Math.floor(Math.random()*o.colors.length)],
+      o.grav||0
+    );
+  }
+}
+function harvestBurst(r,c) {
+  const p = gridToScreen(r,c);
+  burst(p.x, p.y - tileH*0.3, { count:7, colors:["#6abf45","#4a9e3a","#88dd66","#3a7326"], speedMax:2.2, vyBias:-1.2, grav:0.12, size:3, life:26 });
+}
+function fireBurst(r,c) {
+  const p = gridToScreen(r,c);
+  burst(p.x, p.y - tileH*0.4, { count:10, colors:["#ff2000","#ff5000","#ff8c00","#ffd000"], speedMax:1.8, vyBias:-2.0, grav:-0.03, size:4.5, life:34 });
+}
+function sparkBurst(r,c) {
+  const p = gridToScreen(r,c);
+  burst(p.x, p.y - tileH*0.2, { count:6, colors:["#fff4b0","#ffd000","#ff8800","#ffffff"], speedMin:1.5, speedMax:4, grav:0.18, size:2, life:18 });
+}
+function clinkBurst(r,c) {
+  const p = gridToScreen(r,c);
+  burst(p.x, p.y - tileH*0.3, { count:4, colors:["#cfcfcf","#9a9a9a","#ffffff"], speedMin:1, speedMax:2.5, grav:0.15, size:1.8, life:16 });
+}
+function updateParticles() {
+  fireCtx.clearRect(0,0,fireCanvas.width,fireCanvas.height);
+  for(let i=fireParticles.length-1;i>=0;i--) {
+    const p = fireParticles[i];
+    p.x += p.vx; p.y += p.vy; p.vy += p.grav; p.life--;
+    if(p.life <= 0) { fireParticles.splice(i,1); continue; }
+    fireCtx.globalAlpha = Math.max(0, p.life/p.max);
+    fireCtx.fillStyle = p.color;
+    fireCtx.beginPath(); fireCtx.arc(p.x, p.y, p.size, 0, Math.PI*2); fireCtx.fill();
+  }
+  fireCtx.globalAlpha = 1;
+}
+
 
 // ========================================================================
 // RENDERING & ISOMETRIE
@@ -548,15 +604,23 @@ function processHarvest(r, c, toolId) {
     }
     return false;
   }
-  
+
+  // Disteln sind zu stachelig für Hand & Stahlbesen – nur der Kratzer entfernt sie
+  if(cell.type==="distel" && toolId!==1) {
+    playTone(150,"square",0.06,0.12,0.06);
+    clinkBurst(r,c);
+    return false;
+  }
+
   if(toolId===0) state.stats.plucks++; else state.stats.scrapes++;
   if(cell.clicks>1){ cell.clicks--; return true; }
-  
+
   if(state.stats[cell.type]!==undefined) state.stats[cell.type]++;
   state.score += CONFIG.SCORE_PER_STAGE[cell.stage]||0;
   state.energy = Math.min(CONFIG.MAX_ENERGY, state.energy+(CONFIG.ENERGY_PER_HARVEST[cell.stage]||0));
   state.totalHarvested++;
-  
+  harvestBurst(r,c);
+
   if(cell.type==="dandelion" && toolId===0){
     cell.stage=0; cell.hasRoot=true; cell.growTimer=performance.now(); cell.rootMult=CONFIG.ROOT_REGROW_MULT; cell.originR=null; cell.originC=null;
   }else{
@@ -575,6 +639,7 @@ function activateAbflammer() {
       const cell=state.grid[r][c];
       if(cell.stage>0&&Math.random()<0.5) {
         state.score+=CONFIG.SCORE_PER_STAGE[cell.stage]||0;
+        fireBurst(r,c);
         cell.stage=0;cell.type="none";cell.hasRoot=false;cell.originR=null;cell.originC=null;
         burned=true;
       }
@@ -587,7 +652,7 @@ function activateAbflammer() {
 function activateEssig() {
   if(state.energy<CONFIG.ESSIG_COST) return;
   essigMode = !essigMode;
-  poisonMode = false;
+  poisonMode = false; motorMode = false;
   canvas.style.cursor=essigMode?"crosshair":"pointer";
   updateHUD();
 }
@@ -608,9 +673,19 @@ function fireEssig(r, c) {
 
 function activateMotorBrush() {
   if(state.energy<CONFIG.MOTOR_COST) return;
+  // Nur scharfschalten – das Roden startet erst beim Klick aufs Feld
+  motorMode = !motorMode;
+  poisonMode = false; essigMode = false;
+  canvas.style.cursor = motorMode ? "crosshair" : "pointer";
+  updateHUD();
+}
+
+function fireMotorBrush() {
+  if(state.energy<CONFIG.MOTOR_COST) { motorMode=false; canvas.style.cursor="pointer"; return; }
   state.energy -= CONFIG.MOTOR_COST;
   state.motorBrushActive = true;
   state.motorBrushEnd = performance.now() + 500;
+  motorMode = false; canvas.style.cursor="pointer";
   updateHUD();
 }
 
@@ -646,12 +721,18 @@ function updatePoisonCharge(now) {
 
 function togglePoisonMode() {
   if(state.poisonShots<=0)return;
-  poisonMode=!poisonMode; essigMode=false;
+  poisonMode=!poisonMode; essigMode=false; motorMode=false;
   canvas.style.cursor=poisonMode?"crosshair":"pointer";
   updateHUD();
 }
 
 // UI & LOOP
+function selectTool(n) {
+  state.activeTool=n; poisonMode=false; essigMode=false; motorMode=false;
+  if(canvas) canvas.style.cursor="pointer";
+  updateHUD();
+}
+
 function updateStatsUI() {
   for(let key in state.stats){const el=document.getElementById(`stat-${key}`);if(el)el.textContent=state.stats[key];}
 }
@@ -674,8 +755,9 @@ function updateHUD() {
   const abf=document.getElementById("btn-abflammer");if(abf)abf.className="super-btn"+(state.energy>=CONFIG.ABFLAMMER_COST?" ready":"");
   const esg=document.getElementById("btn-essig");if(esg)esg.className="super-btn"+(state.energy>=CONFIG.ESSIG_COST?" essig-ready":"");
   const mot=document.getElementById("btn-motor");if(mot)mot.className="super-btn"+(state.energy>=CONFIG.MOTOR_COST?" motor-ready":"");
-  
+
   if(esg) esg.style.outline=essigMode?"2px solid #cccc44":"none";
+  if(mot) mot.style.outline=motorMode?"2px solid #ff0088":"none";
   
   const now=performance.now();
   const progress=state.poisonShots>=CONFIG.POISON_MAX_SHOTS?1:(!state.poisonCharging?0:Math.min(1,(now-state.poisonChargeStart)/CONFIG.POISON_CHARGE_TIME));
@@ -695,14 +777,14 @@ function updateHUD() {
 
 function buildToolbar() {
   document.getElementById("toolbar").innerHTML=`
-    <button class="tool-btn active" onclick="state.activeTool=0;poisonMode=false;essigMode=false;updateHUD();">
+    <button class="tool-btn active" onclick="selectTool(0)">
       <span class="key">1</span><span class="icon">✋</span><span class="btn-label">Hand</span>
     </button>
-    <button class="tool-btn" onclick="state.activeTool=1;poisonMode=false;essigMode=false;updateHUD();" style="position:relative;">
+    <button class="tool-btn" onclick="selectTool(1)" style="position:relative;">
       <span class="key">2</span><span class="icon">${SVG_KRATZER}</span><span class="btn-label">Kratzer</span>
       <div id="kratz-cd-bar"><div id="kratz-cd-fill"></div></div>
     </button>
-    <button class="tool-btn" onclick="state.activeTool=2;poisonMode=false;essigMode=false;updateHUD();">
+    <button class="tool-btn" onclick="selectTool(2)">
       <span class="key">3</span><span class="icon">${SVG_BESEN}</span><span class="btn-label">Stahlbesen</span>
     </button>
   `;
@@ -797,10 +879,29 @@ function gameLoop(timestamp) {
     });
   }
 
-  // Motorbürsten Visualisierung & Logik
+  // Motorbürste scharfgeschaltet: Ziel-Vorschau (startet erst beim Klick)
+  if(motorMode && state.hoveredCell) {
+    const {r,c} = state.hoveredCell;
+    [{r:r-1,c:c-1},{r:r,c:c},{r:r+1,c:c+1}].forEach(t => {
+      if(t.r>=0&&t.r<CONFIG.GRID_ROWS&&t.c>=0&&t.c<CONFIG.GRID_COLS) {
+        const s=gridToScreen(t.r,t.c); const hw=tileW/2-1,hh=tileH/2-1;
+        ctx.beginPath();ctx.moveTo(s.x,s.y-hh);ctx.lineTo(s.x+hw,s.y);ctx.lineTo(s.x,s.y+hh);ctx.lineTo(s.x-hw,s.y);ctx.closePath();
+        ctx.fillStyle="rgba(255,0,136,0.15)";ctx.fill();
+        ctx.strokeStyle="#ff0088";ctx.lineWidth=1.5;ctx.stroke();
+      }
+    });
+  }
+
+  // Motorbürsten Visualisierung & Logik (läuft nach dem Klick für 0,5s)
   if(state.motorBrushActive && state.hoveredCell) {
     if(now - lastMotorSound > 90) { playMotorSound(); lastMotorSound = now; }
     const {r,c} = state.hoveredCell;
+    // rotierende Bürsten-Scheibe am Mauszeiger
+    const ch = gridToScreen(r,c); const spin = now/40;
+    ctx.save(); ctx.translate(ch.x, ch.y); ctx.rotate(spin);
+    ctx.strokeStyle="#ff3399"; ctx.lineWidth=2;
+    for(let b=0;b<8;b++){ const a=b/8*Math.PI*2; ctx.beginPath(); ctx.moveTo(Math.cos(a)*3,Math.sin(a)*3); ctx.lineTo(Math.cos(a)*tileH*0.6,Math.sin(a)*tileH*0.6); ctx.stroke(); }
+    ctx.restore();
     // 3 vertikale isometrische Felder
     [{r:r-1,c:c-1},{r:r,c:c},{r:r+1,c:c+1}].forEach(t => {
       if(t.r>=0&&t.r<CONFIG.GRID_ROWS&&t.c>=0&&t.c<CONFIG.GRID_COLS) {
@@ -810,12 +911,14 @@ function gameLoop(timestamp) {
         if(state.grid[t.r][t.c].stage > 0 || state.grid[t.r][t.c].hasRoot) {
           state.grid[t.r][t.c].stage=0; state.grid[t.r][t.c].type="none"; state.grid[t.r][t.c].hasRoot=false;
           state.score++; state.stats.scrapes++; updateStatsUI();
+          sparkBurst(t.r,t.c);
         }
       }
     });
   }
 
   if(state.fireOverlay>0) { ctx.fillStyle=`rgba(255,80,0,${state.fireOverlay})`; ctx.fillRect(0,0,canvas.width,canvas.height); state.fireOverlay-=0.01; }
+  updateParticles();
   updateHUD();
 }
 
@@ -857,6 +960,7 @@ function pauseGame() {
   if(!state.gameStarted || state.gameOver || state.paused) return;
   state.paused = true; pauseStart = performance.now();
   if(animId) cancelAnimationFrame(animId);
+  if(motorMode){ motorMode=false; canvas.style.cursor="pointer"; }
   document.getElementById("pause-screen").style.display = "flex";
 }
 function resumeGame() {
@@ -916,6 +1020,7 @@ function handleInput(e, type) {
           isDragging = true;
           if (poisonMode) activatePoison(r,c);
           else if (essigMode) fireEssig(r,c);
+          else if (motorMode) fireMotorBrush(r,c);
           else if (state.activeTool === 0 || state.activeTool === 1) executeToolAction(r, c);
           else if (state.activeTool === 2) processSweep(r, c);
         } 
@@ -932,7 +1037,7 @@ function handleInput(e, type) {
 canvas=document.getElementById("gameCanvas"); ctx=canvas.getContext("2d");
 fireCanvas=document.getElementById("fireCanvas"); fireCtx=fireCanvas.getContext("2d");
 
-const resize=()=>{ canvas.width=window.innerWidth;canvas.height=window.innerHeight; calcIsometrics(); };
+const resize=()=>{ canvas.width=window.innerWidth;canvas.height=window.innerHeight; fireCanvas.width=window.innerWidth;fireCanvas.height=window.innerHeight; calcIsometrics(); };
 window.addEventListener("resize",resize); resize();
 initState(); buildToolbar();
 
@@ -950,9 +1055,9 @@ window.addEventListener("keydown",e=>{
   if(k==="p"||k==="escape"){ togglePause(); return; }
   if(state.paused) return;
   switch(k){
-    case"1":state.activeTool=0;poisonMode=false;essigMode=false;updateHUD();break;
-    case"2":state.activeTool=1;poisonMode=false;essigMode=false;updateHUD();break;
-    case"3":state.activeTool=2;poisonMode=false;essigMode=false;updateHUD();break;
+    case"1":selectTool(0);break;
+    case"2":selectTool(1);break;
+    case"3":selectTool(2);break;
     case"q":activateAbflammer();break;
     case"w":activateEssig();break;
     case"e":activateMotorBrush();break;
@@ -967,7 +1072,8 @@ const start=()=>{
   document.getElementById("start-screen").style.display="none"; document.getElementById("game-over").style.display="none";
   document.getElementById("pause-screen").style.display="none";
   initAudio();initState();resize();buildToolbar();
-  poisonMode=false; essigMode=false; isDragging=false; canvas.style.cursor="pointer";
+  poisonMode=false; essigMode=false; motorMode=false; isDragging=false; canvas.style.cursor="pointer";
+  fireParticles=[]; fireCtx.clearRect(0,0,fireCanvas.width,fireCanvas.height);
   state.poisonShots=1;state.poisonChargeStart=performance.now();state.poisonCharging=true;
   state.gameStartTime=performance.now();
   state.gameStarted=true;state.lastSpawn=performance.now();

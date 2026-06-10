@@ -30,7 +30,8 @@ Ein Pflasterhof wird von Unkraut überrannt. Du musst Gräser und Löwenzahn aus
 | **3 Superwaffen** | 🔥 Abflammer · ❄️ Spray · ⚡ Vibro-Stampfer |
 | **Energie-System** | Ernten füllt die Leiste, Superwaffen verbrauchen Energie |
 | **Prozedurale Sounds** | Web Audio API – keine externen Audio-Dateien nötig |
-| **Partikeleffekte** | Ernte-Partikel, Feuer-Overlay, Frost-Effekt, Screen-Shake |
+| **Partikeleffekte** | Ernte-Blätter, Feuer-Flammen (Abflammer), Motorbürsten-Funken |
+| **Stachel-Mechanik** | Disteln lassen sich ausschließlich mit dem Kratzer entfernen |
 | **Responsive** | Desktop (Maus + Tastatur) & Mobil (Touch, optimierte Hitboxen) |
 | **Achievement-System** | Pop-ups bei Meilensteinen (10, 50, 100, 250, 500, 1000) |
 | **Zero Dependencies** | Keine Frameworks, keine externen Assets – eine einzige HTML-Datei |
