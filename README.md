@@ -13,8 +13,7 @@
 
 Ein Pflasterhof wird von Unkraut überrannt. Du musst Gräser und Löwenzahn aus den Fugen entfernen, bevor der Hof komplett zugewuchert ist. Die Schwierigkeit steigt exponentiell – wie lange hältst du durch?
 
-**[▶️ Jetzt spielen](https://DEIN-USERNAME.github.io/merles-unkrautpanik/merles_unkrautpanik.html)**
-*(Link nach Deployment anpassen)*
+**[▶️ Jetzt spielen](https://etechnik3r.github.io/unkrautpanik/unkrautpanik.html)**
 
 ---
 
@@ -42,13 +41,13 @@ Ein Pflasterhof wird von Unkraut überrannt. Du musst Gräser und Löwenzahn aus
 
 ```bash
 # Repository klonen
-git clone https://github.com/DEIN-USERNAME/merles-unkrautpanik.git
-cd merles-unkrautpanik
+git clone https://github.com/etechnik3r/unkrautpanik.git
+cd unkrautpanik
 
 # Datei im Browser öffnen – fertig!
-open merles_unkrautpanik.html        # macOS
-xdg-open merles_unkrautpanik.html    # Linux
-start merles_unkrautpanik.html       # Windows
+open unkrautpanik.html        # macOS
+xdg-open unkrautpanik.html    # Linux
+start unkrautpanik.html       # Windows
 ```
 
 Alternativ: Datei direkt per **Drag & Drop** in den Browser ziehen.
@@ -105,7 +104,7 @@ Einfach Werte anpassen, Datei speichern, Browser neu laden.
 ## 🧩 Architektur
 
 ```
-merles_unkrautpanik.html   ← Alles in einer Datei
+unkrautpanik.html   ← Alles in einer Datei
 │
 ├─ HTML          Struktur: Canvas, HUD-Overlay, Toolbar, Screens
 ├─ CSS           Styling: Responsive Layout, Animationen, Dark-UI
