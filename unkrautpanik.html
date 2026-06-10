@@ -43,9 +43,11 @@ html, body { width:100%; height:100%; overflow:hidden; background:#181824; font-
   background:rgba(20,20,30,0.9); border:1px solid #f7b733; border-radius:6px;
   padding:8px; color:#fff; font-size:12px; transition:opacity 0.3s;
 }
-.achiev-title { color:#f7b733; font-weight:bold; margin-bottom:2px; font-size:12px; }
+.achiev-head { display:flex; align-items:center; gap:6px; margin-bottom:3px; }
+.achiev-ic { font-size:15px; line-height:1; }
+.achiev-title { color:#f7b733; font-weight:bold; font-size:12px; flex:1; }
 .achiev-desc { color:#aaa; font-size:10px; margin-bottom:4px; line-height:1.2; }
-.achiev-stats { display:flex; justify-content:space-between; font-size:10px; margin-bottom:2px; }
+.achiev-stats { font-size:10px; color:#ddd; margin-left:auto; }
 .achiev-bar-bg { width:100%; height:6px; background:#333; border-radius:3px; overflow:hidden; }
 .achiev-bar-fill { height:100%; background:#f7b733; transition:width 0.5s; }
 
@@ -104,9 +106,14 @@ html, body { width:100%; height:100%; overflow:hidden; background:#181824; font-
   #stats-panel h3 { width:100%; margin-bottom:2px; }
   .stat-row { width:46%; gap:6px; }
 
-  /* Achievements nach oben statt mitten ins Spielfeld */
-  #achievements-panel { left:50%; transform:translateX(-50%); top:48px; width:92%; max-width:320px; }
-  .achiev-box { padding:6px 8px; }
+  /* Achievements: kleine Chips oben rechts (nur Symbol + Fortschritt), verdecken kaum etwas */
+  #achievements-panel { left:auto; right:6px; transform:none; top:46px; width:auto; max-width:124px; gap:6px; align-items:flex-end; }
+  .achiev-box { padding:4px 7px; font-size:10px; }
+  .achiev-title, .achiev-desc { display:none; }
+  .achiev-head { gap:5px; margin-bottom:2px; }
+  .achiev-ic { font-size:16px; }
+  .achiev-stats { margin-left:0; }
+  .achiev-bar-bg { width:62px; height:4px; }
 
   /* Werkzeugleisten: zwei zentrierte Reihen ohne Überlauf */
   #toolbar { left:0; right:0; bottom:72px; justify-content:center; flex-wrap:nowrap; gap:6px; }
@@ -207,7 +214,8 @@ h1 { font-size:42px; margin-bottom:10px; text-align:center; }
   <div style="font-size:13px; color:#999; margin-bottom:20px; text-align:center; line-height:1.8;">
     <b>Werkzeuge:</b><br>
     <b>[1]</b> Hand (Klick) &nbsp; <b>[2]</b> Kratzer (entfernt 4 Felder, 1s Pause) &nbsp; <b>[3]</b> Stahlbesen (Ziehen/Wischen)<br>
-    <span style="color:#bb77dd;">🌵 Disteln sind zu stachelig – nur der Kratzer entfernt sie!</span><br><br>
+    <span style="color:#bb77dd;">🌵 Disteln sind zu stachelig – nur der Kratzer entfernt sie!</span><br>
+    <span style="color:#88cc88;">🌳 Ausgewachsene Pflanzen sind zäh (2 Schläge) und säen sich selbst aus!</span><br><br>
     <b>Superwaffen (benötigen Energie/Zeit):</b><br>
     <b>[Q]</b> Abfackeln &nbsp; <b>[W]</b> Essigwasser (breitet sich fließend aus)<br>
     <b>[E]</b> Motorbürste (scharfschalten, dann aufs Feld klicken – rodet 0,5s am Mauszeiger)<br>
@@ -237,6 +245,7 @@ const CONFIG = {
   OVERGROWTH_THRESHOLD: 0.85, ROOT_REGROW_MULT: 4.0,
   BASELINE_CELLS: 169, // 13x13 – Referenz, an der die Spawn-Rate skaliert wird
   MOBILE_TARGET_TILE: 50, // angepeilte Feldgröße (px) auf dem Handy
+  MATURE_SEED_MS: 4200, // Intervall, in dem eine ausgewachsene Pflanze aussät
   HIGHSCORE_KEY: "unkrautpanik_highscore",
   POISON_CHARGE_TIME: 15000, POISON_MAX_SHOTS: 3, POISON_RADIUS: 1, POISON_DURATION: 12000,
   WEED_POOL: ["grass","grass","grass","grass","dandelion","dandelion","vogelmiere","vogelmiere","giersch","wegerich","brennnessel","distel","efeu","moos","hahnenfuss","hahnenfuss","schafgarbe","schafgarbe"],
@@ -247,20 +256,20 @@ const CONFIG = {
 };
 
 const ACHIEVEMENTS_DEF = [
-  { id: 'h50', title: 'Fleißige Hände', desc: '50 Unkräuter per Hand gezupft', req: 50, val: (s) => s.stats.plucks },
-  { id: 'k50', title: 'Stahlharter Arbeiter', desc: '50 Unkräuter gekratzt/gewischt', req: 50, val: (s) => s.stats.scrapes },
-  { id: 'm10', title: 'Moos-Bändiger', desc: '10x hartnäckiges Moos entfernt', req: 10, val: (s) => s.stats.moos },
-  { id: 't100', title: 'Garten-Rambo', desc: '100 Unkräuter insgesamt entfernt', req: 100, val: (s) => s.totalHarvested },
-  { id: 'surv120', title: 'Überlebenskünstler', desc: '120 Sekunden lang überlebt', req: 120, val: (s) => Math.floor((performance.now()-s.gameStartTime)/1000) }
+  { id: 'h50', icon: '✋', title: 'Fleißige Hände', desc: '50 Unkräuter per Hand gezupft', req: 50, val: (s) => s.stats.plucks },
+  { id: 'k50', icon: '🔧', title: 'Stahlharter Arbeiter', desc: '50 Unkräuter gekratzt/gewischt', req: 50, val: (s) => s.stats.scrapes },
+  { id: 'm10', icon: '🪨', title: 'Moos-Bändiger', desc: '10x hartnäckiges Moos entfernt', req: 10, val: (s) => s.stats.moos },
+  { id: 't100', icon: '🌿', title: 'Garten-Rambo', desc: '100 Unkräuter insgesamt entfernt', req: 100, val: (s) => s.totalHarvested },
+  { id: 'surv120', icon: '⏱️', title: 'Überlebenskünstler', desc: '120 Sekunden lang überlebt', req: 120, val: (s) => Math.floor((performance.now()-s.gameStartTime)/1000) }
 ];
 
 const DIFFICULTIES = {
   easy:   { name:"🌱 Sonntagsgärtner", quip:"Käffchen, Sonnenhut, ein bisschen zupfen.",
-            BASE_SPAWN_INTERVAL:2600, MIN_SPAWN_INTERVAL:450, GROWTH_TICK_MS:2200, GROWTH_RATE_INCREASE:0.00018, OVERGROWTH_THRESHOLD:0.90 },
+            BASE_SPAWN_INTERVAL:2200, MIN_SPAWN_INTERVAL:340, GROWTH_TICK_MS:1700, GROWTH_RATE_INCREASE:0.00045, OVERGROWTH_THRESHOLD:0.88, MATURE_SEED_MS:7000 },
   medium: { name:"🧤 Schrebergarten-Schreck", quip:"Der Nachbar guckt schon neidisch rüber.",
-            BASE_SPAWN_INTERVAL:1800, MIN_SPAWN_INTERVAL:300, GROWTH_TICK_MS:1500, GROWTH_RATE_INCREASE:0.0003, OVERGROWTH_THRESHOLD:0.85 },
+            BASE_SPAWN_INTERVAL:1350, MIN_SPAWN_INTERVAL:210, GROWTH_TICK_MS:1050, GROWTH_RATE_INCREASE:0.0009, OVERGROWTH_THRESHOLD:0.80, MATURE_SEED_MS:4200 },
   hard:   { name:"🔥 Unkraut-Apokalypse", quip:"Es wuchert schneller als du gucken kannst!",
-            BASE_SPAWN_INTERVAL:1100, MIN_SPAWN_INTERVAL:180, GROWTH_TICK_MS:1050, GROWTH_RATE_INCREASE:0.00055, OVERGROWTH_THRESHOLD:0.80 }
+            BASE_SPAWN_INTERVAL:800, MIN_SPAWN_INTERVAL:120, GROWTH_TICK_MS:650, GROWTH_RATE_INCREASE:0.0016, OVERGROWTH_THRESHOLD:0.72, MATURE_SEED_MS:2400 }
 };
 let currentDifficulty='medium';
 function applyDifficulty(key){
@@ -271,6 +280,7 @@ function applyDifficulty(key){
   CONFIG.GROWTH_TICK_MS=d.GROWTH_TICK_MS;
   CONFIG.GROWTH_RATE_INCREASE=d.GROWTH_RATE_INCREASE;
   CONFIG.OVERGROWTH_THRESHOLD=d.OVERGROWTH_THRESHOLD;
+  CONFIG.MATURE_SEED_MS=d.MATURE_SEED_MS;
 }
 
 let state = {};
@@ -296,7 +306,7 @@ function initState() {
         originR: null, originC: null, clicks: 0,
         poisoned: false, poisonEnd: 0,
         vinegarEnd: 0,
-        lastSwept: 0, sweepCount: 0
+        lastSwept: 0, sweepCount: 0, shakeUntil: 0
       }))
     ),
     score: 0, energy: 0, growthRate: CONFIG.INITIAL_GROWTH_RATE,
@@ -486,6 +496,11 @@ function clinkBurst(r,c) {
   const p = gridToScreen(r,c);
   burst(p.x, p.y - tileH*0.3, { count:4, colors:["#cfcfcf","#9a9a9a","#ffffff"], speedMin:1, speedMax:2.5, grav:0.15, size:1.8, life:16 });
 }
+// schwebende Samen einer ausgewachsenen Pflanze, die aussät
+function seedBurst(r,c) {
+  const p = gridToScreen(r,c);
+  burst(p.x, p.y - tileH*0.6, { count:6, colors:["#f5f2e0","#ffffff","#e6dcb8"], speedMin:0.3, speedMax:1.3, vyBias:-1.6, grav:0.015, size:1.8, life:55 });
+}
 function updateParticles() {
   fireCtx.clearRect(0,0,fireCanvas.width,fireCanvas.height);
   for(let i=fireParticles.length-1;i>=0;i--) {
@@ -602,6 +617,12 @@ function drawWeed(r,c) {
       const dx=os.x-x, dy=os.y-y;
       ctx.strokeStyle="#1d4a14"; ctx.lineWidth=1.5+g*2;
       ctx.beginPath(); ctx.moveTo(0,0); ctx.quadraticCurveTo(dx/2,dy/2-tileH*0.5,dx,dy); ctx.stroke();
+    }
+    // Ausgewachsen: sanftes Pulsieren (lebt/größer) + kurzes Wackeln nach einem Treffer
+    if(cell.stage===CONFIG.MAX_STAGE){
+      const sh=(cell.shakeUntil&&now<cell.shakeUntil)?Math.sin(now/22)*((cell.shakeUntil-now)/45):0;
+      const breathe=1.05+Math.sin(t*2+(r+c))*0.035;
+      ctx.translate(sh,0); ctx.scale(breathe,breathe);
     }
     // Simplifizierte Pflanzen-Aufrufe für Code-Kompaktheit
     setSeed(r*131+c*7+1); // feste Variation pro Feld (kein Flackern)
@@ -946,6 +967,7 @@ function growWeeds(now) {
         const typeMod=cell.type==="moos"?2.5:1;
         if(now-cell.growTimer>(interval*typeMod)) {
           cell.stage++; cell.growTimer=now;
+          if(cell.stage===CONFIG.MAX_STAGE){ cell.clicks=Math.max(cell.clicks,2); } // ausgewachsen: zäh, braucht 2 Schläge
           if(cell.type==="efeu"&&cell.stage>=6&&Math.random()<0.2) {
             const dirs=[[-1,0],[1,0],[0,-1],[0,1]];
             for(let d of dirs) {
@@ -961,6 +983,28 @@ function growWeeds(now) {
           }
         }
       }
+      else if(cell.stage===CONFIG.MAX_STAGE) {
+        // Ausgewachsene Pflanze sät aus -> neuer Keimling im Nachbarfeld (dynamischer Druck)
+        if(cell.clicks<2) cell.clicks=2;
+        const seedEvery=Math.max(1100, CONFIG.MATURE_SEED_MS/state.growthRate);
+        if(now-cell.growTimer>seedEvery){ cell.growTimer=now; seedMature(r,c,now); }
+      }
+    }
+  }
+}
+
+function seedMature(r,c,now){
+  const dirs=[[-1,0],[1,0],[0,-1],[0,1]];
+  for(let k=dirs.length-1;k>0;k--){ const j=Math.floor(Math.random()*(k+1)); const tmp=dirs[k]; dirs[k]=dirs[j]; dirs[j]=tmp; }
+  for(const d of dirs){
+    const nr=r+d[0], nc=c+d[1];
+    if(nr<0||nr>=CONFIG.GRID_ROWS||nc<0||nc>=CONFIG.GRID_COLS) continue;
+    const t=state.grid[nr][nc];
+    if(t.stage===0&&!t.hasRoot&&!t.poisoned&&!(t.vinegarEnd&&now<t.vinegarEnd)){
+      t.stage=1; t.type=CONFIG.WEED_POOL[Math.floor(Math.random()*CONFIG.WEED_POOL.length)];
+      t.growTimer=now; t.originR=null; t.originC=null; t.clicks=(t.type==="moos"?3:1);
+      seedBurst(r,c);
+      return;
     }
   }
 }
@@ -985,7 +1029,11 @@ function processHarvest(r, c, toolId) {
   }
 
   if(toolId===0) state.stats.plucks++; else state.stats.scrapes++;
-  if(cell.clicks>1){ cell.clicks--; return true; }
+  if(cell.clicks>1){
+    cell.clicks--;
+    if(cell.stage===CONFIG.MAX_STAGE){ cell.shakeUntil=performance.now()+260; harvestBurst(r,c); } // zäh: erster Schlag wackelt nur
+    return true;
+  }
 
   if(state.stats[cell.type]!==undefined) state.stats[cell.type]++;
   state.score += CONFIG.SCORE_PER_STAGE[cell.stage]||0;
@@ -1190,9 +1238,8 @@ function checkAchievements(now) {
       const box = document.createElement('div');
       box.className = 'achiev-box'; box.id = `achiev-${def.id}`;
       box.innerHTML = `
-        <div class="achiev-title">${def.title}</div>
+        <div class="achiev-head"><span class="achiev-ic">${def.icon||'🏆'}</span><span class="achiev-title">${def.title}</span><span class="achiev-stats" id="achiev-txt-${def.id}">${Math.floor(val)} / ${def.req}</span></div>
         <div class="achiev-desc">${def.desc}</div>
-        <div class="achiev-stats"><span id="achiev-txt-${def.id}">${Math.floor(val)} / ${def.req}</span></div>
         <div class="achiev-bar-bg"><div class="achiev-bar-fill" id="achiev-bar-${def.id}" style="width:${progress*100}%"></div></div>
       `;
       panel.appendChild(box);
