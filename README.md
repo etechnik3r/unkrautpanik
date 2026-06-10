@@ -29,7 +29,8 @@ Ein Pflasterhof wird von Unkraut überrannt. Du musst Gräser und Löwenzahn aus
 | **3 Superwaffen** | 🔥 Abflammer · ❄️ Spray · ⚡ Vibro-Stampfer |
 | **Energie-System** | Ernten füllt die Leiste, Superwaffen verbrauchen Energie |
 | **Prozedurale Sounds** | Web Audio API – keine externen Audio-Dateien nötig |
-| **Partikeleffekte** | Ernte-Partikel, Feuer-Overlay, Frost-Effekt, Screen-Shake |
+| **Partikeleffekte** | Ernte-Blätter, Feuer-Flammen (Abflammer), Motorbürsten-Funken |
+| **Stachel-Mechanik** | Disteln lassen sich ausschließlich mit dem Kratzer entfernen |
 | **Responsive** | Desktop (Maus + Tastatur) & Mobil (Touch, optimierte Hitboxen) |
 | **Achievement-System** | Pop-ups bei Meilensteinen (10, 50, 100, 250, 500, 1000) |
 | **Zero Dependencies** | Keine Frameworks, keine externen Assets – eine einzige HTML-Datei |
@@ -40,13 +41,13 @@ Ein Pflasterhof wird von Unkraut überrannt. Du musst Gräser und Löwenzahn aus
 
 ```bash
 # Repository klonen
-git clone https://github.com/DEIN-USERNAME/merles-unkrautpanik.git
-cd merles-unkrautpanik
+git clone https://github.com/etechnik3r/unkrautpanik.git
+cd unkrautpanik
 
 # Datei im Browser öffnen – fertig!
-open merles_unkrautpanik.html        # macOS
-xdg-open merles_unkrautpanik.html    # Linux
-start merles_unkrautpanik.html       # Windows
+open unkrautpanik.html        # macOS
+xdg-open unkrautpanik.html    # Linux
+start unkrautpanik.html       # Windows
 ```
 
 Alternativ: Datei direkt per **Drag & Drop** in den Browser ziehen.
@@ -103,7 +104,7 @@ Einfach Werte anpassen, Datei speichern, Browser neu laden.
 ## 🧩 Architektur
 
 ```
-merles_unkrautpanik.html   ← Alles in einer Datei
+unkrautpanik.html   ← Alles in einer Datei
 │
 ├─ HTML          Struktur: Canvas, HUD-Overlay, Toolbar, Screens
 ├─ CSS           Styling: Responsive Layout, Animationen, Dark-UI
