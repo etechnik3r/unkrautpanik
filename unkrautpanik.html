@@ -144,7 +144,39 @@ h1 { font-size:42px; margin-bottom:10px; text-align:center; }
 .diff-btn.easy { border-color:#56ab2f; color:#56ab2f; }
 .diff-btn.medium { border-color:#f7b733; color:#f7b733; }
 .diff-btn.hard { border-color:#e74c3c; color:#e74c3c; }
-.diff-btn:hover { transform:scale(1.04); box-shadow:0 0 14px rgba(255,255,255,0.08); }
+.diff-btn:hover { transform:scale(1.04); box-shadow:0 0 18px rgba(255,255,255,0.12); }
+.diff-btn:active { transform:scale(0.99); }
+
+/* ---- Startbildschirm: hübscher, mobiltauglich ---- */
+#start-screen { background:radial-gradient(ellipse at 50% 28%, #1d2e1a 0%, #141622 62%, #0f1018 100%);
+  overflow-y:auto; justify-content:flex-start; padding:max(24px,4vh) 16px 40px; }
+.start-deco { font-size:26px; letter-spacing:7px; margin-bottom:4px; animation:decoSway 5s ease-in-out infinite; filter:drop-shadow(0 3px 5px rgba(0,0,0,.5)); }
+@keyframes decoSway { 0%,100%{ transform:rotate(-3deg) } 50%{ transform:rotate(3deg) } }
+.start-title { font-size:clamp(30px,8vw,52px); font-weight:800; line-height:1.1; text-align:center; margin-bottom:6px;
+  color:#a8e063; background:linear-gradient(90deg,#56ab2f,#a8e063,#f7b733);
+  -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+  filter:drop-shadow(0 0 14px rgba(86,171,47,.45)); animation:titlePulse 3.5s ease-in-out infinite; }
+@keyframes titlePulse { 0%,100%{ filter:drop-shadow(0 0 12px rgba(86,171,47,.4)); } 50%{ filter:drop-shadow(0 0 24px rgba(247,183,51,.6)); } }
+.start-sub { color:#9fb89a; font-size:14px; margin-bottom:18px; text-align:center; }
+.best-badge { background:rgba(247,183,51,.12); border:1px solid #f7b733; color:#f7d27a; padding:6px 16px; border-radius:20px; font-size:14px; margin-bottom:18px; }
+.howto { background:rgba(20,26,20,.55); border:1px solid #2c3a28; border-radius:14px; padding:14px 18px; max-width:430px; width:100%; margin-bottom:22px; }
+.howto-title { color:#7ec850; font-weight:bold; font-size:12px; text-transform:uppercase; letter-spacing:1.5px; margin-bottom:11px; text-align:center; }
+.howto-grid { display:grid; grid-template-columns:1fr 1fr; gap:9px 16px; }
+.ht { display:flex; align-items:center; gap:8px; color:#cfe0c8; font-size:13px; }
+.ht-ic { font-size:18px; width:22px; text-align:center; flex-shrink:0; }
+.kbd { display:inline-block; margin-left:6px; min-width:15px; padding:1px 5px; font-size:10px; font-weight:bold; color:#ccc; background:#2a2a36; border:1px solid #555; border-bottom-width:2px; border-radius:4px; vertical-align:middle; }
+.howto-tips { margin-top:12px; padding-top:10px; border-top:1px solid #2c3a28; color:#9aab94; font-size:11.5px; text-align:center; line-height:1.6; }
+.diff-label { color:#bbb; font-size:14px; margin-bottom:14px; text-align:center; }
+.diff-wrap { display:flex; flex-direction:column; gap:12px; align-items:center; width:100%; }
+@media (max-width:768px){
+  .kbd { display:none; }
+  .start-deco { font-size:22px; letter-spacing:5px; }
+  .start-sub { font-size:13px; margin-bottom:14px; }
+  .howto { padding:12px 14px; margin-bottom:18px; }
+  .ht { font-size:12px; gap:6px; }
+  .ht-ic { font-size:16px; width:20px; }
+  .diff-btn { min-width:230px; }
+}
 #fireCanvas { position:absolute; top:0; left:0; pointer-events:none; z-index:15; }
 </style>
 </head>
@@ -210,21 +242,29 @@ h1 { font-size:42px; margin-bottom:10px; text-align:center; }
 </div>
 
 <div id="start-screen">
-  <h1 style="color:#56ab2f;">🌿 Merles Unkrautpanik</h1>
-  <div style="font-size:13px; color:#999; margin-bottom:20px; text-align:center; line-height:1.8;">
-    <b>Werkzeuge:</b><br>
-    <b>[1]</b> Hand (Klick) &nbsp; <b>[2]</b> Kratzer (entfernt 4 Felder, 1s Pause) &nbsp; <b>[3]</b> Stahlbesen (Ziehen/Wischen)<br>
-    <span style="color:#bb77dd;">🌵 Disteln sind zu stachelig – nur der Kratzer entfernt sie!</span><br>
-    <span style="color:#88cc88;">🌳 Ausgewachsene Pflanzen sind zäh (2 Schläge) und säen sich selbst aus!</span><br><br>
-    <b>Superwaffen (benötigen Energie/Zeit):</b><br>
-    <b>[Q]</b> Abfackeln &nbsp; <b>[W]</b> Essigwasser (breitet sich fließend aus)<br>
-    <b>[E]</b> Motorbürste (scharfschalten, dann aufs Feld klicken – rodet 0,5s am Mauszeiger)<br>
-    <b>[R]</b> Giftspritze (Pflanzen verrotten)<br><br>
-    <b>[P]</b> / <b>[Esc]</b> Pause
+  <div class="start-deco">🌱🌿🌼🍀🌾</div>
+  <h1 class="start-title">Merles Unkrautpanik</h1>
+  <div class="start-sub">🌿 Rette den Pflasterhof vor dem Unkraut! 🌿</div>
+
+  <div id="best-score-start" class="best-badge" style="display:none;">🏆 Bestwert: <span id="best-score-val">0</span></div>
+
+  <div class="howto">
+    <div class="howto-title">So spielst du</div>
+    <div class="howto-grid">
+      <div class="ht"><span class="ht-ic">✋</span><span>Hand – zupfen<span class="kbd">1</span></span></div>
+      <div class="ht"><span class="ht-ic">🔧</span><span>Kratzer – 4 Felder<span class="kbd">2</span></span></div>
+      <div class="ht"><span class="ht-ic">🧹</span><span>Stahlbesen – wischen<span class="kbd">3</span></span></div>
+      <div class="ht"><span class="ht-ic">🔥</span><span>Abfackeln<span class="kbd">Q</span></span></div>
+      <div class="ht"><span class="ht-ic">🧪</span><span>Essigwasser<span class="kbd">W</span></span></div>
+      <div class="ht"><span class="ht-ic">⚙️</span><span>Motorbürste<span class="kbd">E</span></span></div>
+      <div class="ht"><span class="ht-ic">☣️</span><span>Giftspritze<span class="kbd">R</span></span></div>
+      <div class="ht"><span class="ht-ic">⏸️</span><span>Pause<span class="kbd">P</span></span></div>
+    </div>
+    <div class="howto-tips">🌵 Disteln nur mit dem Kratzer &nbsp;·&nbsp; 🌳 Ausgewachsene Pflanzen sind zäh & säen sich aus</div>
   </div>
-  <div id="best-score-start" style="display:none; color:#f7b733; font-size:15px; margin-bottom:18px;">🏆 Bestwert: <span id="best-score-val">0</span></div>
-  <div style="font-size:13px; color:#aaa; margin-bottom:14px;">Wähle deinen Schwierigkeitsgrad:</div>
-  <div style="display:flex; flex-direction:column; gap:12px; align-items:center;">
+
+  <div class="diff-label">Wähle deinen Schwierigkeitsgrad</div>
+  <div class="diff-wrap">
     <button id="btn-easy" class="diff-btn easy">🌱 Sonntagsgärtner<small>Käffchen, Sonnenhut, ein bisschen zupfen.</small></button>
     <button id="btn-medium" class="diff-btn medium">🧤 Schrebergarten-Schreck<small>Der Nachbar guckt schon neidisch rüber.</small></button>
     <button id="btn-hard" class="diff-btn hard">🔥 Unkraut-Apokalypse<small>Es wuchert schneller als du gucken kannst!</small></button>
@@ -985,7 +1025,6 @@ function growWeeds(now) {
       }
       else if(cell.stage===CONFIG.MAX_STAGE) {
         // Ausgewachsene Pflanze sät aus -> neuer Keimling im Nachbarfeld (dynamischer Druck)
-        if(cell.clicks<2) cell.clicks=2;
         const seedEvery=Math.max(1100, CONFIG.MATURE_SEED_MS/state.growthRate);
         if(now-cell.growTimer>seedEvery){ cell.growTimer=now; seedMature(r,c,now); }
       }
