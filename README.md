@@ -13,8 +13,7 @@
 
 Ein Pflasterhof wird von Unkraut überrannt. Du musst Gräser und Löwenzahn aus den Fugen entfernen, bevor der Hof komplett zugewuchert ist. Die Schwierigkeit steigt exponentiell – wie lange hältst du durch?
 
-**[▶️ Jetzt spielen](https://DEIN-USERNAME.github.io/merles-unkrautpanik/merles_unkrautpanik.html)**
-*(Link nach Deployment anpassen)*
+**[▶️ Jetzt spielen](https://DEIN-USERNAME.github.io/merles-unkrautpanik/unkrautpanik.html)**
 
 ---
 
