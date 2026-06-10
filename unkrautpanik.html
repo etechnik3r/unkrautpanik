@@ -132,6 +132,12 @@ h1 { font-size:42px; margin-bottom:10px; text-align:center; }
 #start-btn:hover { background:#56ab2f; color:#1a1a2e; }
 #restart-btn { border-color:#f7b733; color:#f7b733; }
 #restart-btn:hover { background:#f7b733; color:#1a1a2e; }
+.diff-btn { display:flex; flex-direction:column; gap:3px; min-width:250px; padding:11px 22px; font-size:17px; font-weight:bold; border:2px solid; background:none; border-radius:10px; cursor:pointer; transition:all .15s; }
+.diff-btn small { font-size:11px; color:#999; font-weight:normal; }
+.diff-btn.easy { border-color:#56ab2f; color:#56ab2f; }
+.diff-btn.medium { border-color:#f7b733; color:#f7b733; }
+.diff-btn.hard { border-color:#e74c3c; color:#e74c3c; }
+.diff-btn:hover { transform:scale(1.04); box-shadow:0 0 14px rgba(255,255,255,0.08); }
 #fireCanvas { position:absolute; top:0; left:0; pointer-events:none; z-index:15; }
 </style>
 </head>
@@ -185,6 +191,7 @@ h1 { font-size:42px; margin-bottom:10px; text-align:center; }
     <div>🏆 <span class="stat-val" id="go-trophies">0</span><div style="color:#777;font-size:11px;">Trophäen</div></div>
   </div>
   <button id="restart-btn" class="btn-large">🔄 Nochmal spielen</button>
+  <button id="menu-btn" class="btn-large" style="border-color:#888; color:#888; margin-top:12px; font-size:15px; padding:10px 28px;">🏡 Schwierigkeit ändern</button>
 </div>
 
 <div id="pause-screen" style="position:fixed; top:0; left:0; width:100%; height:100%; display:none; flex-direction:column; align-items:center; justify-content:center; background:rgba(10,10,16,0.85); color:#e0e0e0; z-index:250;">
@@ -206,7 +213,12 @@ h1 { font-size:42px; margin-bottom:10px; text-align:center; }
     <b>[P]</b> / <b>[Esc]</b> Pause
   </div>
   <div id="best-score-start" style="display:none; color:#f7b733; font-size:15px; margin-bottom:18px;">🏆 Bestwert: <span id="best-score-val">0</span></div>
-  <button id="start-btn" class="btn-large">🎮 Spiel starten</button>
+  <div style="font-size:13px; color:#aaa; margin-bottom:14px;">Wähle deinen Schwierigkeitsgrad:</div>
+  <div style="display:flex; flex-direction:column; gap:12px; align-items:center;">
+    <button id="btn-easy" class="diff-btn easy">🌱 Sonntagsgärtner<small>Käffchen, Sonnenhut, ein bisschen zupfen.</small></button>
+    <button id="btn-medium" class="diff-btn medium">🧤 Schrebergarten-Schreck<small>Der Nachbar guckt schon neidisch rüber.</small></button>
+    <button id="btn-hard" class="diff-btn hard">🔥 Unkraut-Apokalypse<small>Es wuchert schneller als du gucken kannst!</small></button>
+  </div>
 </div>
 
 <script>
@@ -239,6 +251,25 @@ const ACHIEVEMENTS_DEF = [
   { id: 't100', title: 'Garten-Rambo', desc: '100 Unkräuter insgesamt entfernt', req: 100, val: (s) => s.totalHarvested },
   { id: 'surv120', title: 'Überlebenskünstler', desc: '120 Sekunden lang überlebt', req: 120, val: (s) => Math.floor((performance.now()-s.gameStartTime)/1000) }
 ];
+
+const DIFFICULTIES = {
+  easy:   { name:"🌱 Sonntagsgärtner", quip:"Käffchen, Sonnenhut, ein bisschen zupfen.",
+            BASE_SPAWN_INTERVAL:2600, MIN_SPAWN_INTERVAL:450, GROWTH_TICK_MS:2200, GROWTH_RATE_INCREASE:0.00018, OVERGROWTH_THRESHOLD:0.90 },
+  medium: { name:"🧤 Schrebergarten-Schreck", quip:"Der Nachbar guckt schon neidisch rüber.",
+            BASE_SPAWN_INTERVAL:1800, MIN_SPAWN_INTERVAL:300, GROWTH_TICK_MS:1500, GROWTH_RATE_INCREASE:0.0003, OVERGROWTH_THRESHOLD:0.85 },
+  hard:   { name:"🔥 Unkraut-Apokalypse", quip:"Es wuchert schneller als du gucken kannst!",
+            BASE_SPAWN_INTERVAL:1100, MIN_SPAWN_INTERVAL:180, GROWTH_TICK_MS:1050, GROWTH_RATE_INCREASE:0.00055, OVERGROWTH_THRESHOLD:0.80 }
+};
+let currentDifficulty='medium';
+function applyDifficulty(key){
+  const d=DIFFICULTIES[key]; if(!d) return;
+  currentDifficulty=key;
+  CONFIG.BASE_SPAWN_INTERVAL=d.BASE_SPAWN_INTERVAL;
+  CONFIG.MIN_SPAWN_INTERVAL=d.MIN_SPAWN_INTERVAL;
+  CONFIG.GROWTH_TICK_MS=d.GROWTH_TICK_MS;
+  CONFIG.GROWTH_RATE_INCREASE=d.GROWTH_RATE_INCREASE;
+  CONFIG.OVERGROWTH_THRESHOLD=d.OVERGROWTH_THRESHOLD;
+}
 
 let state = {};
 let audioCtx = null;
@@ -334,6 +365,24 @@ function playMotorSound() {
   playNoise(800, "lowpass", 1.5, 0.1); playTone(120, "sawtooth", 0.1, 0.5, 0.1);
 }
 
+// Druckspritze: kurzer Trigger-"Klick" + zischender Sprühnebel (Höhen, leicht abklingend)
+function playSpraySound() {
+  if (!audioCtx || isMuted) return;
+  try {
+    playTone(95, "square", 0.04, 0.18, 0.04); // Abzug
+    const dur=0.5;
+    const buf=audioCtx.createBuffer(1, audioCtx.sampleRate*dur, audioCtx.sampleRate);
+    const d=buf.getChannelData(0);
+    for(let i=0;i<d.length;i++){ const env=1-i/d.length; d[i]=(Math.random()*2-1)*env*env; }
+    const src=audioCtx.createBufferSource(); src.buffer=buf;
+    const hp=audioCtx.createBiquadFilter(); hp.type="highpass"; hp.frequency.value=3500;
+    const bp=audioCtx.createBiquadFilter(); bp.type="bandpass"; bp.frequency.value=6500; bp.Q.value=0.6;
+    const g=audioCtx.createGain(); g.gain.setValueAtTime(0.9, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime+dur);
+    src.connect(hp).connect(bp).connect(g).connect(audioCtx.destination); src.start();
+  } catch(e){}
+}
+
 // ========================================================================
 // PARTIKEL-SYSTEM (auf fireCanvas-Overlay)
 // ========================================================================
@@ -390,15 +439,15 @@ function updateParticles() {
 
 
 // ========================================================================
-// RENDERING & ISOMETRIE
+// RENDERING (gerade Draufsicht – auf allen Geräten)
 // ========================================================================
-let tileW, tileH, originX, originY, cellSize=0, gridMode=false;
+let tileW, tileH, originX, originY, cellSize=0, gridMode=true;
 
 // reservierter UI-Platz oben (HUD) / unten (zwei Button-Reihen) im Hochformat
 const MOBILE_TOP_UI=56, MOBILE_BOTTOM_UI=132, MOBILE_MARGIN_X=6;
 
 // Wählt die Rastergröße passend zum Gerät:
-// Desktop -> 13x13 (Isometrie); Handy -> hochkant (mehr Reihen als Spalten),
+// Desktop -> 13x13; Handy -> hochkant (mehr Reihen als Spalten),
 // Felder ~MOBILE_TARGET_TILE groß und damit gut tippbar.
 function chooseGridDims() {
   const w=window.innerWidth, h=window.innerHeight;
@@ -415,51 +464,31 @@ function chooseGridDims() {
 function calcIsometrics() {
   const w=canvas.width, h=canvas.height;
   isMobile=w<768;
-  gridMode=isMobile; // Handy: gerade Draufsicht (große, gut tippbare Felder); Desktop: Isometrie
+  gridMode=true; // gerade Draufsicht überall (bessere Usability, nichts wird abgeschnitten)
 
-  if(gridMode) {
-    // Top-Down-Raster: quadratische Felder, maximale Spielfläche im Hochformat
-    const availW=w-MOBILE_MARGIN_X*2;
-    const availH=h-MOBILE_TOP_UI-MOBILE_BOTTOM_UI;
-    cellSize=Math.floor(Math.min(availW/CONFIG.GRID_COLS, availH/CONFIG.GRID_ROWS));
-    const gridW=cellSize*CONFIG.GRID_COLS, gridH=cellSize*CONFIG.GRID_ROWS;
-    originX=(w-gridW)/2;
-    originY=MOBILE_TOP_UI+Math.max(0,(availH-gridH)/2);
-    tileW=cellSize; tileH=cellSize*0.85; // Pflanzen-Proportionen
-    return;
-  }
+  let topUI,bottomUI,leftUI,rightUI;
+  if(isMobile){ topUI=MOBILE_TOP_UI; bottomUI=MOBILE_BOTTOM_UI; leftUI=MOBILE_MARGIN_X; rightUI=MOBILE_MARGIN_X; }
+  else { topUI=72; bottomUI=24; leftUI=232; rightUI=120; } // Platz für HUD oben, Stats links, Tools rechts
 
-  const uiWidthOffset=260;
-  const availW=w-uiWidthOffset-40;
-  const availH=h-120;
-  const maxLogicalWidth=(CONFIG.GRID_COLS+CONFIG.GRID_ROWS)/2;
-  const calcW=availW/maxLogicalWidth;
-  const calcH=(availH/maxLogicalWidth)*2;
-  tileW=Math.min(calcW,calcH)*1.2; tileH=tileW/2;
-  originX=uiWidthOffset+availW/2;
-  originY=60+(availH-(CONFIG.GRID_ROWS+CONFIG.GRID_COLS)*tileH/2)/2;
+  const availW=w-leftUI-rightUI;
+  const availH=h-topUI-bottomUI;
+  cellSize=Math.floor(Math.min(availW/CONFIG.GRID_COLS, availH/CONFIG.GRID_ROWS));
+  const gridW=cellSize*CONFIG.GRID_COLS, gridH=cellSize*CONFIG.GRID_ROWS;
+  originX=leftUI+Math.max(0,(availW-gridW)/2);
+  originY=topUI+Math.max(0,(availH-gridH)/2);
+  tileW=cellSize; tileH=cellSize*0.85; // Pflanzen-Proportionen
 }
 
-function gridToScreen(r,c) {
-  if(gridMode) return { x:originX+c*cellSize+cellSize/2, y:originY+r*cellSize+cellSize/2 };
-  return { x:originX+(c-r)*tileW/2, y:originY+(c+r)*tileH/2 };
-}
+function gridToScreen(r,c) { return { x:originX+c*cellSize+cellSize/2, y:originY+r*cellSize+cellSize/2 }; }
 function isInTile(sx,sy,r,c) {
-  const {x,y}=gridToScreen(r,c);
-  if(gridMode) { const hs=cellSize/2; return Math.abs(sx-x)<=hs && Math.abs(sy-y)<=hs; }
-  const dx=Math.abs(sx-x), dy=Math.abs(sy-y);
-  return (dx/(tileW/2)+dy/(tileH/2))<=1;
+  const {x,y}=gridToScreen(r,c); const hs=cellSize/2;
+  return Math.abs(sx-x)<=hs && Math.abs(sy-y)<=hs;
 }
 
-// Zeichnet die Feld-Kontur (Raute bei Isometrie, Quadrat bei Draufsicht)
+// Zeichnet die quadratische Feld-Kontur
 function traceTile(cx,cy) {
-  ctx.beginPath();
-  if(gridMode) {
-    const s=cellSize/2-1; ctx.rect(cx-s,cy-s,s*2,s*2);
-  } else {
-    const hw=tileW/2-1, hh=tileH/2-1;
-    ctx.moveTo(cx,cy-hh); ctx.lineTo(cx+hw,cy); ctx.lineTo(cx,cy+hh); ctx.lineTo(cx-hw,cy); ctx.closePath();
-  }
+  const s=cellSize/2-1;
+  ctx.beginPath(); ctx.rect(cx-s,cy-s,s*2,s*2);
 }
 
 function drawTile(r,c) {
@@ -513,6 +542,7 @@ function drawWeed(r,c) {
       ctx.beginPath(); ctx.moveTo(0,0); ctx.quadraticCurveTo(dx/2,dy/2-tileH*0.5,dx,dy); ctx.stroke();
     }
     // Simplifizierte Pflanzen-Aufrufe für Code-Kompaktheit
+    setSeed(r*131+c*7+1); // feste Variation pro Feld (kein Flackern)
     switch(cell.type) {
       case "grass": drawGrass(g,globalWindForce,cell.stage); break;
       case "dandelion": drawDandelion(g,globalWindForce,cell.stage); break;
@@ -528,57 +558,153 @@ function drawWeed(r,c) {
   ctx.restore();
 }
 
-// Komprimierte Pflanzen-Routinen
-function drawGrass(g,wind,stage) {
-  const h=g*tileH*1.4+2; const sway=wind*g*10;
-  ctx.strokeStyle="#4a9e3a"; ctx.lineWidth=1.5+g*2;
-  for(let i=0;i<3;i++) {
-    const offset=(i-1)*tileW*0.15;
-    ctx.beginPath(); ctx.moveTo(offset,0); ctx.quadraticCurveTo(offset+sway*0.5, -h*0.5, offset+sway, -h*(0.8+i*0.1)); ctx.stroke();
+// ---- Pflanzen-Grafik: gemeinsame Helfer ----
+let _seed=1;
+function setSeed(s){ _seed=((s|0)%2147483647); if(_seed<=0)_seed+=2147483646; }
+function sr(){ _seed=(_seed*16807)%2147483647; return (_seed-1)/2147483646; }
+const GREENS=["#3f8f2f","#4a9e3a","#57ab44","#357a28","#66bf50","#2f7a22"];
+
+// einfaches Blatt nach oben (Ursprung = Ansatz; vorher translate/rotate)
+function leaf(len,wid,col){
+  ctx.fillStyle=col;
+  ctx.beginPath(); ctx.moveTo(0,0);
+  ctx.quadraticCurveTo(wid,-len*0.45,0,-len);
+  ctx.quadraticCurveTo(-wid,-len*0.45,0,0);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle="rgba(0,45,0,0.25)"; ctx.lineWidth=Math.max(0.4,wid*0.13);
+  ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(0,-len*0.9); ctx.stroke();
+}
+// gelapptes/gezacktes Blatt (Löwenzahn, Distel)
+function lobedLeaf(len,wid,col){
+  ctx.fillStyle=col; ctx.beginPath(); ctx.moveTo(0,0);
+  const seg=4;
+  for(let s=1;s<=seg;s++){ const y=-len*s/seg; const x=wid*(1-s/seg+0.2)*(s%2?1:0.5); ctx.lineTo(x,y); }
+  ctx.lineTo(0,-len);
+  for(let s=seg;s>=1;s--){ const y=-len*s/seg; const x=wid*(1-s/seg+0.2)*(s%2?1:0.5); ctx.lineTo(-x,y); }
+  ctx.closePath(); ctx.fill();
+}
+
+function drawGrass(g,wind,stage){
+  const baseH=g*tileH*1.7+3, sway=wind*g*9;
+  const blades=Math.min(9,4+Math.floor(stage/2));
+  ctx.lineCap="round";
+  for(let i=0;i<blades;i++){
+    const f=(i/(blades-1))-0.5;
+    const offX=f*tileW*0.55;
+    const hh=baseH*(0.6+0.5*Math.cos(f*Math.PI))*(0.85+sr()*0.3);
+    const s=sway*(0.5+Math.abs(f)*1.3);
+    ctx.strokeStyle=GREENS[i%GREENS.length]; ctx.lineWidth=1.1+g*1.7;
+    ctx.beginPath(); ctx.moveTo(offX,0); ctx.quadraticCurveTo(offX+s*0.5,-hh*0.55,offX+s,-hh); ctx.stroke();
+  }
+  ctx.lineCap="butt";
+}
+
+function drawDandelion(g,wind,stage){
+  const sway=wind*g*6;
+  // Basalrosette aus gelappten Blättern
+  for(let i=0;i<6;i++){ ctx.save(); ctx.rotate((i/6)*Math.PI*2+0.5); lobedLeaf(g*tileH*0.9*(0.8+sr()*0.4),g*tileW*0.15,"#3a6b1a"); ctx.restore(); }
+  const h=g*tileH*1.5+4;
+  ctx.strokeStyle="#5a9030"; ctx.lineWidth=1.4+g*1.6;
+  ctx.beginPath(); ctx.moveTo(0,0); ctx.quadraticCurveTo(sway*0.5,-h*0.55,sway,-h); ctx.stroke();
+  ctx.save(); ctx.translate(sway,-h);
+  if(stage<6){ ctx.fillStyle="#3a7a18"; ctx.beginPath(); ctx.ellipse(0,0,g*3.2,g*5,0,0,Math.PI*2); ctx.fill(); }
+  else if(stage<11){ ctx.fillStyle="#ffcf1a";
+    for(let i=0;i<16;i++){ ctx.save(); ctx.rotate(i/16*Math.PI*2); ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(1.6,-g*9); ctx.lineTo(-1.6,-g*9); ctx.closePath(); ctx.fill(); ctx.restore(); }
+    ctx.fillStyle="#f0a500"; ctx.beginPath(); ctx.arc(0,0,g*4,0,Math.PI*2); ctx.fill();
+  } else { // Pusteblume
+    ctx.strokeStyle="rgba(255,255,255,0.85)"; ctx.lineWidth=0.6;
+    for(let i=0;i<20;i++){ const a=i/20*Math.PI*2, rr=g*11; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(Math.cos(a)*rr,Math.sin(a)*rr); ctx.stroke();
+      ctx.fillStyle="rgba(255,255,255,0.9)"; ctx.beginPath(); ctx.arc(Math.cos(a)*rr,Math.sin(a)*rr,1.1,0,Math.PI*2); ctx.fill(); }
+    ctx.fillStyle="#caa46a"; ctx.beginPath(); ctx.arc(0,0,g*2.4,0,Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawGiersch(g,wind,stage){
+  const sway=wind*g*7;
+  for(let i=0;i<5;i++){ ctx.save(); ctx.rotate((i/5)*Math.PI*2+0.4); leaf(g*tileH*0.85,g*tileH*0.32,GREENS[(i+2)%GREENS.length]); ctx.restore(); }
+  const h=g*tileH*1.5+3;
+  ctx.strokeStyle="#6aab48"; ctx.lineWidth=1.2+g*1.4;
+  ctx.beginPath(); ctx.moveTo(0,0); ctx.quadraticCurveTo(sway*0.5,-h*0.55,sway,-h); ctx.stroke();
+  if(stage>5){ ctx.fillStyle="#fff"; ctx.save(); ctx.translate(sway,-h);
+    for(let i=0;i<10;i++){ const a=i/10*Math.PI*2, rr=g*5.5; ctx.beginPath(); ctx.arc(Math.cos(a)*rr,Math.sin(a)*rr*0.6,g*1.3,0,Math.PI*2); ctx.fill(); }
+    ctx.beginPath(); ctx.arc(0,0,g*1.3,0,Math.PI*2); ctx.fill(); ctx.restore();
   }
 }
-function drawDandelion(g,wind,stage) {
-  const h=g*tileH*1.4+3; const sway=wind*g*7;
-  ctx.strokeStyle="#5a9030"; ctx.lineWidth=1.5+g*1.5; ctx.beginPath(); ctx.moveTo(0,0); ctx.quadraticCurveTo(sway*0.5,-h*0.5,sway,-h); ctx.stroke();
-  if(stage<6) { ctx.fillStyle="#2a5a10"; ctx.beginPath(); ctx.ellipse(sway,-h,g*4,g*7,0,0,Math.PI*2); ctx.fill(); }
-  else if(stage<10) { ctx.fillStyle="#ffd700"; ctx.beginPath(); ctx.arc(sway,-h,g*8,0,Math.PI*2); ctx.fill(); }
-  else { ctx.fillStyle="rgba(255,255,255,0.85)"; ctx.beginPath(); ctx.arc(sway,-h,g*10,0,Math.PI*2); ctx.fill(); }
-}
-function drawGiersch(g,wind,stage) {
-  const h=g*tileH*1.5+3; const sway=wind*g*7;
-  ctx.strokeStyle="#7ec850"; ctx.lineWidth=1.5+g*1.5; ctx.beginPath(); ctx.moveTo(0,0); ctx.quadraticCurveTo(sway*0.5,-h*0.5,sway,-h); ctx.stroke();
-  if(stage>5) { ctx.fillStyle="#fff"; for(let i=0;i<4;i++) { ctx.beginPath(); ctx.arc(sway+(i-1.5)*g*6,-h+(i%2)*g*3,g*2.5,0,Math.PI*2); ctx.fill(); } }
-}
-function drawVogelmiere(g,stage) {
-  ctx.fillStyle="#559955"; ctx.beginPath(); ctx.ellipse(0,0,g*tileW*0.4,g*tileH*0.4,0,0,Math.PI*2); ctx.fill();
-  if(stage>5){ ctx.fillStyle="#fff"; ctx.beginPath(); ctx.arc(-g*tileW*0.2,-g*tileH*0.1,g*1.5,0,Math.PI*2); ctx.fill(); }
-}
-function drawWegerich(g,wind,stage) {
-  ctx.fillStyle="#aa8855"; ctx.beginPath(); ctx.ellipse(0,0,g*tileW*0.35,g*tileH*0.25,0,0,Math.PI*2); ctx.fill();
-  if(stage>5){ ctx.strokeStyle="#8a6a40"; ctx.lineWidth=1.5; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(wind*g*4,-g*tileH*1.6); ctx.stroke(); }
-}
-function drawBrennnessel(g,wind,stage) {
-  const h=g*tileH*1.9+5; const sway=wind*g*8;
-  ctx.strokeStyle="#2e5c1e"; ctx.lineWidth=2+g*2; ctx.beginPath(); ctx.moveTo(0,0); ctx.quadraticCurveTo(sway*0.5,-h*0.5,sway,-h); ctx.stroke();
-  ctx.fillStyle="#3a7326";
-  for(let i=1;i<=4;i++) {
-    const f=i/5; const wy=-h*f; const wx=sway*f;
-    ctx.beginPath(); ctx.moveTo(wx,wy); ctx.lineTo(wx+g*10,wy-g*4); ctx.lineTo(wx,wy-g*8); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(wx,wy); ctx.lineTo(wx-g*10,wy-g*4); ctx.lineTo(wx,wy-g*8); ctx.fill();
+
+function drawVogelmiere(g,stage){
+  for(let i=0;i<8;i++){ const a=i/8*Math.PI*2, rr=g*tileW*0.3*(0.55+sr()*0.6);
+    const lx=Math.cos(a)*rr, ly=Math.sin(a)*rr*0.75;
+    ctx.fillStyle=GREENS[i%GREENS.length];
+    ctx.beginPath(); ctx.ellipse(lx,ly,g*tileW*0.13,g*tileH*0.1,a,0,Math.PI*2); ctx.fill();
+  }
+  if(stage>5){
+    for(let k=0;k<3;k++){ const a=sr()*6.28, rr=g*tileW*0.18, sx=Math.cos(a)*rr, sy=Math.sin(a)*rr*0.75;
+      ctx.fillStyle="#fff"; for(let p=0;p<5;p++){ const pa=p/5*Math.PI*2; ctx.beginPath(); ctx.arc(sx+Math.cos(pa)*g*1.7,sy+Math.sin(pa)*g*1.7,g*0.9,0,Math.PI*2); ctx.fill(); }
+      ctx.fillStyle="#ffe14d"; ctx.beginPath(); ctx.arc(sx,sy,g*0.9,0,Math.PI*2); ctx.fill();
+    }
   }
 }
-function drawDistel(g,wind,stage) {
-  const h=g*tileH*1.7+5; const sway=wind*g*5;
-  ctx.strokeStyle="#4a6c3e"; ctx.lineWidth=2+g*2; ctx.beginPath(); ctx.moveTo(0,0); ctx.quadraticCurveTo(sway*0.5,-h*0.5,sway,-h); ctx.stroke();
-  if(stage>5){ ctx.fillStyle="#7020a0"; ctx.beginPath(); ctx.arc(sway,-h,g*6,0,Math.PI*2); ctx.fill(); }
+
+function drawWegerich(g,wind,stage){
+  for(let i=0;i<5;i++){ ctx.save(); ctx.rotate((i/5)*Math.PI*2+0.2);
+    const ll=g*tileH*1.0; leaf(ll,ll*0.4,GREENS[(i+1)%GREENS.length]); ctx.restore(); }
+  if(stage>4){ const h=g*tileH*1.9, sway=wind*g*4;
+    ctx.strokeStyle="#7a6a3a"; ctx.lineWidth=1.3+g;
+    ctx.beginPath(); ctx.moveTo(0,0); ctx.quadraticCurveTo(sway*0.5,-h*0.6,sway,-h); ctx.stroke();
+    ctx.fillStyle="#9a8a55"; ctx.beginPath(); ctx.ellipse(sway,-h+g*4,g*1.8,g*7,0,0,Math.PI*2); ctx.fill();
+  }
 }
-function drawEfeu(g,stage) {
-  ctx.fillStyle="#2d7a1e"; ctx.beginPath(); ctx.arc(0,0,g*tileW*0.2,0,Math.PI*2); ctx.fill();
-  ctx.beginPath(); ctx.arc(g*10,-g*5,g*tileW*0.15,0,Math.PI*2); ctx.fill();
+
+function drawBrennnessel(g,wind,stage){
+  const h=g*tileH*1.9+5, sway=wind*g*7;
+  ctx.strokeStyle="#2e6b1e"; ctx.lineWidth=1.8+g*1.8;
+  ctx.beginPath(); ctx.moveTo(0,0); ctx.quadraticCurveTo(sway*0.5,-h*0.5,sway,-h); ctx.stroke();
+  const pairs=Math.min(5,2+Math.floor(stage/3));
+  for(let i=1;i<=pairs;i++){
+    const f=i/(pairs+0.5), wy=-h*f, wx=sway*f, ls=g*tileH*0.55*(1-f*0.35);
+    for(const dir of [1,-1]){ ctx.save(); ctx.translate(wx,wy); ctx.rotate(dir*1.05); leaf(ls,ls*0.3,"#367a24"); ctx.restore(); }
+  }
+  if(stage>9){ ctx.strokeStyle="#cfcf9a"; ctx.lineWidth=0.8;
+    for(let i=2;i<=pairs;i++){ const f=i/(pairs+0.5); ctx.beginPath(); ctx.moveTo(sway*f,-h*f); ctx.lineTo(sway*f+g*3,-h*f+g*5); ctx.stroke(); } }
 }
-function drawMoos(g,clicksRemaining) {
-  const op=Math.max(0.1,clicksRemaining/3);
-  ctx.fillStyle=`rgba(70,110,40,${op})`; ctx.beginPath(); ctx.ellipse(0,0,g*tileW*0.45,g*tileH*0.45,0,0,Math.PI*2); ctx.fill();
+
+function drawDistel(g,wind,stage){
+  const sway=wind*g*5;
+  for(let i=0;i<5;i++){ ctx.save(); ctx.rotate((i/5)*Math.PI*2+0.4); lobedLeaf(g*tileH*0.95,g*tileW*0.17,"#557a46"); ctx.restore(); }
+  const h=g*tileH*1.7+5;
+  ctx.strokeStyle="#4a6c3e"; ctx.lineWidth=1.8+g*1.8;
+  ctx.beginPath(); ctx.moveTo(0,0); ctx.quadraticCurveTo(sway*0.5,-h*0.5,sway,-h); ctx.stroke();
+  if(stage>5){ ctx.save(); ctx.translate(sway,-h);
+    ctx.fillStyle="#4f7a3a"; for(let i=0;i<10;i++){ ctx.save(); ctx.rotate(i/10*Math.PI*2); ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(2,-g*6); ctx.lineTo(-2,-g*6); ctx.closePath(); ctx.fill(); ctx.restore(); }
+    ctx.fillStyle="#7a2aa8"; ctx.beginPath(); ctx.arc(0,-g*2,g*4.5,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle="#a85fe0"; ctx.lineWidth=0.9;
+    for(let i=0;i<11;i++){ const a=-Math.PI/2+(i/10-0.5)*1.7; ctx.beginPath(); ctx.moveTo(0,-g*3); ctx.lineTo(Math.cos(a)*g*7,-g*3+Math.sin(a)*g*7); ctx.stroke(); }
+    ctx.restore();
+  }
+}
+
+function drawEfeu(g,stage){
+  const n=3+Math.floor(stage/4);
+  for(let i=0;i<n;i++){ const a=i/n*Math.PI*2+0.5, rr=g*tileW*0.22*(0.6+sr()*0.7);
+    ctx.save(); ctx.translate(Math.cos(a)*rr,Math.sin(a)*rr*0.75); ctx.rotate(a+sr()); ivyLeaf(g*tileW*0.26); ctx.restore(); }
+}
+function ivyLeaf(s){
+  ctx.fillStyle="#2f7d22";
+  ctx.beginPath(); ctx.moveTo(0,-s);
+  ctx.bezierCurveTo(s*0.95,-s*0.55,s*0.7,s*0.35,0,s*0.4);
+  ctx.bezierCurveTo(-s*0.7,s*0.35,-s*0.95,-s*0.55,0,-s); ctx.fill();
+  ctx.strokeStyle="rgba(190,255,190,0.3)"; ctx.lineWidth=0.5;
+  ctx.beginPath(); ctx.moveTo(0,s*0.3); ctx.lineTo(0,-s*0.7); ctx.stroke();
+}
+
+function drawMoos(g,clicksRemaining){
+  const op=Math.max(0.3,clicksRemaining/3), R=g*tileW*0.46;
+  ctx.fillStyle=`rgba(74,110,40,${op})`;
+  ctx.beginPath(); ctx.ellipse(0,0,R,R*0.85,0,0,Math.PI*2); ctx.fill();
+  for(let i=0;i<16;i++){ const a=sr()*6.28, rr=sr()*R*0.9, x=Math.cos(a)*rr, y=Math.sin(a)*rr*0.85;
+    ctx.fillStyle=`rgba(${90+(sr()*45|0)},${130+(sr()*55|0)},${50+(sr()*30|0)},${op})`;
+    ctx.beginPath(); ctx.arc(x,y,R*0.13,0,Math.PI*2); ctx.fill(); }
 }
 
 // ========================================================================
@@ -772,7 +898,7 @@ function activatePoison(targetR,targetC) {
   if(state.poisonShots<=0) return;
   state.poisonShots--;
   const now=performance.now();
-  playNoise(4000, "highpass", 1.0, 0.3); playTone(220, "sine", 0.35, 0.2, 0.3);
+  playSpraySound();
   for(let dr=-CONFIG.POISON_RADIUS;dr<=CONFIG.POISON_RADIUS;dr++) {
     for(let dc=-CONFIG.POISON_RADIUS;dc<=CONFIG.POISON_RADIUS;dc++) {
       const nr=targetR+dr,nc=targetC+dc;
@@ -1160,17 +1286,26 @@ const start=()=>{
   if(animId)cancelAnimationFrame(animId); requestAnimationFrame(gameLoop);
 };
 
-document.getElementById("start-btn").addEventListener("click",start);
+["easy","medium","hard"].forEach(k=>{
+  const b=document.getElementById("btn-"+k);
+  if(b) b.addEventListener("click",()=>{ applyDifficulty(k); start(); });
+});
 document.getElementById("restart-btn").addEventListener("click",start);
+document.getElementById("menu-btn").addEventListener("click",()=>{
+  document.getElementById("game-over").style.display="none";
+  document.getElementById("start-screen").style.display="flex";
+  showBestOnStart();
+});
 document.getElementById("resume-btn").addEventListener("click",resumeGame);
 document.getElementById("mute-btn").addEventListener("click",()=>{isMuted=!isMuted;document.getElementById("mute-btn").textContent=isMuted?"🔇":"🔊";});
 document.getElementById("stats-btn").addEventListener("click",()=>{document.getElementById("stats-panel").classList.toggle("open");});
 
 // Bestwert auf dem Startbildschirm anzeigen
-(function showBestOnStart(){
+function showBestOnStart(){
   const best=getHighscore();
   if(best>0){ document.getElementById("best-score-start").style.display="block"; document.getElementById("best-score-val").textContent=best; }
-})();
+}
+showBestOnStart();
 </script>
 </body>
 </html>
