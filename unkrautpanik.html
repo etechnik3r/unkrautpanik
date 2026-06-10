@@ -221,6 +221,8 @@ const CONFIG = {
   MAX_ENERGY: 100,
   ABFLAMMER_COST: 80, ESSIG_COST: 50, MOTOR_COST: 60,
   OVERGROWTH_THRESHOLD: 0.85, ROOT_REGROW_MULT: 4.0,
+  BASELINE_CELLS: 169, // 13x13 – Referenz, an der die Spawn-Rate skaliert wird
+  MOBILE_TARGET_TILE: 50, // angepeilte Feldgröße (px) auf dem Handy
   HIGHSCORE_KEY: "unkrautpanik_highscore",
   POISON_CHARGE_TIME: 15000, POISON_MAX_SHOTS: 3, POISON_RADIUS: 1, POISON_DURATION: 12000,
   WEED_POOL: ["grass","grass","grass","grass","dandelion","dandelion","vogelmiere","vogelmiere","giersch","wegerich","brennnessel","distel","efeu","moos"],
@@ -265,6 +267,7 @@ function initState() {
       }))
     ),
     score: 0, energy: 0, growthRate: CONFIG.INITIAL_GROWTH_RATE,
+    cellCount: CONFIG.GRID_ROWS*CONFIG.GRID_COLS,
     totalHarvested: 0, activeTool: 0,
     gameOver: false, gameStarted: false, paused: false, lastSpawn: 0,
     gameStartTime: 0, trophies: 0,
@@ -391,6 +394,24 @@ function updateParticles() {
 // ========================================================================
 let tileW, tileH, originX, originY, cellSize=0, gridMode=false;
 
+// reservierter UI-Platz oben (HUD) / unten (zwei Button-Reihen) im Hochformat
+const MOBILE_TOP_UI=56, MOBILE_BOTTOM_UI=132, MOBILE_MARGIN_X=6;
+
+// Wählt die Rastergröße passend zum Gerät:
+// Desktop -> 13x13 (Isometrie); Handy -> hochkant (mehr Reihen als Spalten),
+// Felder ~MOBILE_TARGET_TILE groß und damit gut tippbar.
+function chooseGridDims() {
+  const w=window.innerWidth, h=window.innerHeight;
+  if(w>=768) return { cols:13, rows:13 };
+  const t=CONFIG.MOBILE_TARGET_TILE;
+  const availW=w-MOBILE_MARGIN_X*2;
+  const availH=h-MOBILE_TOP_UI-MOBILE_BOTTOM_UI;
+  let cols=Math.max(5,Math.min(10,Math.round(availW/t)));
+  const s=availW/cols;
+  let rows=Math.max(cols+1,Math.min(18,Math.floor(availH/s)));
+  return { cols, rows };
+}
+
 function calcIsometrics() {
   const w=canvas.width, h=canvas.height;
   isMobile=w<768;
@@ -398,13 +419,12 @@ function calcIsometrics() {
 
   if(gridMode) {
     // Top-Down-Raster: quadratische Felder, maximale Spielfläche im Hochformat
-    const topUI=56, bottomUI=132, marginX=6;
-    const availW=w-marginX*2;
-    const availH=h-topUI-bottomUI;
+    const availW=w-MOBILE_MARGIN_X*2;
+    const availH=h-MOBILE_TOP_UI-MOBILE_BOTTOM_UI;
     cellSize=Math.floor(Math.min(availW/CONFIG.GRID_COLS, availH/CONFIG.GRID_ROWS));
     const gridW=cellSize*CONFIG.GRID_COLS, gridH=cellSize*CONFIG.GRID_ROWS;
     originX=(w-gridW)/2;
-    originY=topUI+Math.max(0,(availH-gridH)/2);
+    originY=MOBILE_TOP_UI+Math.max(0,(availH-gridH)/2);
     tileW=cellSize; tileH=cellSize*0.85; // Pflanzen-Proportionen
     return;
   }
@@ -565,7 +585,9 @@ function drawMoos(g,clicksRemaining) {
 // LOGIK
 // ========================================================================
 function spawnWeed(now) {
-  const interval=Math.max(CONFIG.MIN_SPAWN_INTERVAL,CONFIG.BASE_SPAWN_INTERVAL/state.growthRate);
+  // Kleinere Raster (Handy) spawnen proportional langsamer -> gleichbleibender Druck pro Feld
+  const sizeFactor=Math.max(0.8,Math.min(2.2,CONFIG.BASELINE_CELLS/(state.cellCount||CONFIG.BASELINE_CELLS)));
+  const interval=Math.max(CONFIG.MIN_SPAWN_INTERVAL,CONFIG.BASE_SPAWN_INTERVAL*sizeFactor/state.growthRate);
   if(now-state.lastSpawn<interval) return;
   state.lastSpawn=now;
   let free=[];
@@ -1128,6 +1150,7 @@ document.addEventListener("visibilitychange",()=>{ if(document.hidden) pauseGame
 const start=()=>{
   document.getElementById("start-screen").style.display="none"; document.getElementById("game-over").style.display="none";
   document.getElementById("pause-screen").style.display="none";
+  const dims=chooseGridDims(); CONFIG.GRID_COLS=dims.cols; CONFIG.GRID_ROWS=dims.rows;
   initAudio();initState();resize();buildToolbar();
   poisonMode=false; essigMode=false; motorMode=false; isDragging=false; canvas.style.cursor="pointer";
   fireParticles=[]; fireCtx.clearRect(0,0,fireCanvas.width,fireCanvas.height);
