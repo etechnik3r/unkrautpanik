@@ -23,7 +23,8 @@ html, body { width:100%; height:100%; overflow:hidden; background:#181824; font-
 #energy-bar { background:linear-gradient(90deg,#f7b733,#fc4a1a); width:0%; }
 #overgrowth-bar { background:linear-gradient(90deg,#56ab2f,#e74c3c); width:0%; }
 #score-display { font-size:16px; font-weight:700; color:#f7b733; }
-#mute-btn { pointer-events:auto; background:none; border:1px solid #555; color:#e0e0e0; border-radius:6px; padding:4px 10px; cursor:pointer; font-size:16px; }
+#mute-btn, #stats-btn { pointer-events:auto; background:none; border:1px solid #555; color:#e0e0e0; border-radius:6px; padding:4px 10px; cursor:pointer; font-size:16px; }
+#stats-btn { display:none; }
 
 #stats-panel {
   position:absolute; pointer-events:auto; background:rgba(20,20,30,0.9);
@@ -83,20 +84,39 @@ html, body { width:100%; height:100%; overflow:hidden; background:#181824; font-
 
 @media (min-width: 769px) {
   #stats-panel { top:80px; left:16px; min-width:200px; }
+  #stats-btn { display:none; }
   #achievements-panel { right:16px; top:80px; }
   #toolbar { right:16px; top:45%; transform:translateY(-50%); flex-direction:column; }
   #super-toolbar { right:16px; bottom:16px; flex-direction:column; }
 }
 @media (max-width: 768px) {
-  .hud-title { display: none; }
-  #stats-panel { top:60px; left:10px; right:10px; flex-direction:row; flex-wrap:wrap; font-size:11px; padding:10px; }
-  #stats-panel h3 { width:100%; margin-bottom:0; }
-  .stat-row { width:45%; gap:5px; }
-  #achievements-panel { left:10px; top:220px; width:180px; }
-  #toolbar { bottom:12px; left:12px; flex-direction:row; flex-wrap:wrap; max-width:220px; }
-  #super-toolbar { bottom:12px; right:12px; flex-direction:row; flex-wrap:wrap; max-width:260px; }
-  .tool-btn { width:55px; height:55px; }
-  .super-btn { width:65px; height:65px; }
+  .hud-title { display:none; }
+  #stats-btn { display:inline-block; }
+  #hud { gap:8px; padding:6px 8px; }
+  .hud-item { font-size:12px; gap:3px; }
+  .hud-label { font-size:11px; }
+  .bar-outer { width:54px; height:12px; }
+
+  /* Live-Statistik einklappbar – standardmäßig aus, per 📊 umschaltbar */
+  #stats-panel { display:none; top:50px; left:6px; right:6px; flex-direction:row; flex-wrap:wrap;
+                 gap:4px 10px; font-size:11px; padding:10px 12px; max-height:55vh; overflow-y:auto; }
+  #stats-panel.open { display:flex; }
+  #stats-panel h3 { width:100%; margin-bottom:2px; }
+  .stat-row { width:46%; gap:6px; }
+
+  /* Achievements nach oben statt mitten ins Spielfeld */
+  #achievements-panel { left:50%; transform:translateX(-50%); top:48px; width:92%; max-width:320px; }
+  .achiev-box { padding:6px 8px; }
+
+  /* Werkzeugleisten: zwei zentrierte Reihen ohne Überlauf */
+  #toolbar { left:0; right:0; bottom:72px; justify-content:center; flex-wrap:nowrap; gap:6px; }
+  #super-toolbar { left:0; right:0; bottom:8px; justify-content:center; flex-wrap:nowrap; gap:6px; }
+  .tool-btn { width:52px; height:52px; }
+  .super-btn { width:58px; height:58px; }
+  .btn-label, .key { display:none; }
+  .icon { font-size:22px; margin-bottom:0; }
+  .tank-dots { margin-top:1px; }
+  .charge-bar { width:40px; margin-top:1px; }
 }
 
 #game-over, #start-screen {
@@ -128,6 +148,7 @@ h1 { font-size:42px; margin-bottom:10px; text-align:center; }
     <div class="hud-item"><span class="hud-label">Score:</span><span id="score-display">0</span></div>
     <div class="hud-item"><span class="hud-label">Energie:</span><div class="bar-outer"><div class="bar-inner" id="energy-bar"></div></div></div>
     <div class="hud-item"><span class="hud-label">Verwucherung:</span><div class="bar-outer"><div class="bar-inner" id="overgrowth-bar"></div></div><span id="overgrowth-pct" style="color:#e74c3c;font-size:12px;">0%</span></div>
+    <button id="stats-btn" title="Live-Statistik ein/aus">📊</button>
     <button id="mute-btn" title="Ton an/aus">🔊</button>
   </div>
 </div>
@@ -368,48 +389,84 @@ function updateParticles() {
 // ========================================================================
 // RENDERING & ISOMETRIE
 // ========================================================================
-let tileW, tileH, originX, originY;
+let tileW, tileH, originX, originY, cellSize=0, gridMode=false;
 
 function calcIsometrics() {
   const w=canvas.width, h=canvas.height;
   isMobile=w<768;
-  const uiWidthOffset=isMobile?0:260;
+  gridMode=isMobile; // Handy: gerade Draufsicht (große, gut tippbare Felder); Desktop: Isometrie
+
+  if(gridMode) {
+    // Top-Down-Raster: quadratische Felder, maximale Spielfläche im Hochformat
+    const topUI=56, bottomUI=132, marginX=6;
+    const availW=w-marginX*2;
+    const availH=h-topUI-bottomUI;
+    cellSize=Math.floor(Math.min(availW/CONFIG.GRID_COLS, availH/CONFIG.GRID_ROWS));
+    const gridW=cellSize*CONFIG.GRID_COLS, gridH=cellSize*CONFIG.GRID_ROWS;
+    originX=(w-gridW)/2;
+    originY=topUI+Math.max(0,(availH-gridH)/2);
+    tileW=cellSize; tileH=cellSize*0.85; // Pflanzen-Proportionen
+    return;
+  }
+
+  const uiWidthOffset=260;
   const availW=w-uiWidthOffset-40;
-  const availH=h-(isMobile?180:120);
+  const availH=h-120;
   const maxLogicalWidth=(CONFIG.GRID_COLS+CONFIG.GRID_ROWS)/2;
   const calcW=availW/maxLogicalWidth;
   const calcH=(availH/maxLogicalWidth)*2;
   tileW=Math.min(calcW,calcH)*1.2; tileH=tileW/2;
   originX=uiWidthOffset+availW/2;
-  originY=(isMobile?80:60)+(availH-(CONFIG.GRID_ROWS+CONFIG.GRID_COLS)*tileH/2)/2;
+  originY=60+(availH-(CONFIG.GRID_ROWS+CONFIG.GRID_COLS)*tileH/2)/2;
 }
 
-function gridToScreen(r,c) { return { x:originX+(c-r)*tileW/2, y:originY+(c+r)*tileH/2 }; }
+function gridToScreen(r,c) {
+  if(gridMode) return { x:originX+c*cellSize+cellSize/2, y:originY+r*cellSize+cellSize/2 };
+  return { x:originX+(c-r)*tileW/2, y:originY+(c+r)*tileH/2 };
+}
 function isInTile(sx,sy,r,c) {
   const {x,y}=gridToScreen(r,c);
+  if(gridMode) { const hs=cellSize/2; return Math.abs(sx-x)<=hs && Math.abs(sy-y)<=hs; }
   const dx=Math.abs(sx-x), dy=Math.abs(sy-y);
   return (dx/(tileW/2)+dy/(tileH/2))<=1;
+}
+
+// Zeichnet die Feld-Kontur (Raute bei Isometrie, Quadrat bei Draufsicht)
+function traceTile(cx,cy) {
+  ctx.beginPath();
+  if(gridMode) {
+    const s=cellSize/2-1; ctx.rect(cx-s,cy-s,s*2,s*2);
+  } else {
+    const hw=tileW/2-1, hh=tileH/2-1;
+    ctx.moveTo(cx,cy-hh); ctx.lineTo(cx+hw,cy); ctx.lineTo(cx,cy+hh); ctx.lineTo(cx-hw,cy); ctx.closePath();
+  }
 }
 
 function drawTile(r,c) {
   const {x,y}=gridToScreen(r,c);
   const skin=state.stoneSkin;
-  const hw=tileW/2-1, hh=tileH/2-1;
   const cell=state.grid[r][c];
   const now=performance.now();
-  
-  ctx.beginPath(); ctx.moveTo(x,y-hh); ctx.lineTo(x+hw,y); ctx.lineTo(x,y+hh); ctx.lineTo(x-hw,y); ctx.closePath();
+
+  traceTile(x,y);
   ctx.fillStyle=skin.base; ctx.fill(); ctx.strokeStyle=skin.dark; ctx.stroke();
-  
+
+  // leichte Tiefenwirkung im Raster-Modus (oben heller, unten dunkler)
+  if(gridMode) {
+    const s=cellSize/2-1;
+    ctx.fillStyle="rgba(255,255,255,0.06)"; ctx.fillRect(x-s,y-s,s*2,Math.max(1,s*0.4));
+    ctx.fillStyle="rgba(0,0,0,0.10)"; ctx.fillRect(x-s,y+s*0.6,s*2,Math.max(1,s*0.4));
+  }
+
   if(cell.poisoned && now<cell.poisonEnd) {
     ctx.fillStyle=`rgba(40,160,80,0.25)`; ctx.fill();
   }
   if(cell.vinegarEnd && now<cell.vinegarEnd) {
     ctx.fillStyle=`rgba(200,200,100,0.35)`; ctx.fill();
   }
-  
+
   if(state.hoveredCell?.r===r && state.hoveredCell?.c===c) {
-    ctx.fillStyle="rgba(255,255,255,0.15)"; ctx.fill();
+    traceTile(x,y); ctx.fillStyle="rgba(255,255,255,0.15)"; ctx.fill();
   }
 }
 
@@ -871,8 +928,8 @@ function gameLoop(timestamp) {
       
     targets.forEach(t => {
       if(t.r>=0&&t.r<CONFIG.GRID_ROWS&&t.c>=0&&t.c<CONFIG.GRID_COLS) {
-        const s=gridToScreen(t.r,t.c); const hw=tileW/2-1,hh=tileH/2-1;
-        ctx.beginPath();ctx.moveTo(s.x,s.y-hh);ctx.lineTo(s.x+hw,s.y);ctx.lineTo(s.x,s.y+hh);ctx.lineTo(s.x-hw,s.y);ctx.closePath();
+        const s=gridToScreen(t.r,t.c);
+        traceTile(s.x,s.y);
         ctx.fillStyle=poisonMode?"rgba(0,255,136,0.2)":"rgba(200,200,80,0.2)";ctx.fill();
         ctx.strokeStyle=poisonMode?"#00ff88":"#cccc44";ctx.lineWidth=1.5;ctx.stroke();
       }
@@ -884,8 +941,8 @@ function gameLoop(timestamp) {
     const {r,c} = state.hoveredCell;
     [{r:r-1,c:c-1},{r:r,c:c},{r:r+1,c:c+1}].forEach(t => {
       if(t.r>=0&&t.r<CONFIG.GRID_ROWS&&t.c>=0&&t.c<CONFIG.GRID_COLS) {
-        const s=gridToScreen(t.r,t.c); const hw=tileW/2-1,hh=tileH/2-1;
-        ctx.beginPath();ctx.moveTo(s.x,s.y-hh);ctx.lineTo(s.x+hw,s.y);ctx.lineTo(s.x,s.y+hh);ctx.lineTo(s.x-hw,s.y);ctx.closePath();
+        const s=gridToScreen(t.r,t.c);
+        traceTile(s.x,s.y);
         ctx.fillStyle="rgba(255,0,136,0.15)";ctx.fill();
         ctx.strokeStyle="#ff0088";ctx.lineWidth=1.5;ctx.stroke();
       }
@@ -905,8 +962,8 @@ function gameLoop(timestamp) {
     // 3 vertikale isometrische Felder
     [{r:r-1,c:c-1},{r:r,c:c},{r:r+1,c:c+1}].forEach(t => {
       if(t.r>=0&&t.r<CONFIG.GRID_ROWS&&t.c>=0&&t.c<CONFIG.GRID_COLS) {
-        const s=gridToScreen(t.r,t.c); const hw=tileW/2-1,hh=tileH/2-1;
-        ctx.beginPath();ctx.moveTo(s.x,s.y-hh);ctx.lineTo(s.x+hw,s.y);ctx.lineTo(s.x,s.y+hh);ctx.lineTo(s.x-hw,s.y);ctx.closePath();
+        const s=gridToScreen(t.r,t.c);
+        traceTile(s.x,s.y);
         ctx.fillStyle="rgba(255,0,136,0.3)";ctx.fill();
         if(state.grid[t.r][t.c].stage > 0 || state.grid[t.r][t.c].hasRoot) {
           state.grid[t.r][t.c].stage=0; state.grid[t.r][t.c].type="none"; state.grid[t.r][t.c].hasRoot=false;
@@ -1084,6 +1141,7 @@ document.getElementById("start-btn").addEventListener("click",start);
 document.getElementById("restart-btn").addEventListener("click",start);
 document.getElementById("resume-btn").addEventListener("click",resumeGame);
 document.getElementById("mute-btn").addEventListener("click",()=>{isMuted=!isMuted;document.getElementById("mute-btn").textContent=isMuted?"🔇":"🔊";});
+document.getElementById("stats-btn").addEventListener("click",()=>{document.getElementById("stats-panel").classList.toggle("open");});
 
 // Bestwert auf dem Startbildschirm anzeigen
 (function showBestOnStart(){
